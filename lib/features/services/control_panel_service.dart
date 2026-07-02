@@ -128,14 +128,24 @@ class ControlPanelService {
 
   Future<void> _installWindowsRootCertificate() async {
     final certificateFile = await _copyRootCertificateToTemporaryFile();
-    final result = await _runPowerShell('''
-\$ErrorActionPreference = 'Stop'
-Import-Certificate -FilePath '${_escapePowerShellSingleQuoted(certificateFile.path)}' -CertStoreLocation Cert:\\CurrentUser\\Root | Out-Null
-''');
+    final result = await Process.run('certutil.exe', [
+      '-user',
+      '-f',
+      '-addstore',
+      'Root',
+      certificateFile.path,
+    ]);
     if (result.exitCode != 0) {
       throw RootCertificateInstallException(
         _processFailureDetails(result),
         guidance: '请确认当前 Windows 用户证书存储可写后重试。',
+      );
+    }
+
+    if (!await _isWindowsRootCertificateTrusted(certificateFile.path)) {
+      throw const RootCertificateInstallException(
+        '系统未能在当前用户的受信任根证书存储中找到该证书。',
+        guidance: '请检查 Windows 证书策略后重试。',
       );
     }
   }

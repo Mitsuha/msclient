@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'package:desktop/features/view_models/control_panel_view_model.dart';
@@ -26,10 +29,12 @@ class AppSidebar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const DragToMoveArea(
-            child: SizedBox(height: 16, width: double.infinity),
-          ),
-          const SizedBox(height: 12),
+          if (!Platform.isWindows) ...[
+            const DragToMoveArea(
+              child: SizedBox(height: 16, width: double.infinity),
+            ),
+            const SizedBox(height: 12),
+          ],
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 18),
             child: Text(

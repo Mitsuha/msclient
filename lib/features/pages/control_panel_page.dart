@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -20,55 +22,97 @@ class ControlPanelPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final viewModel = context.watch<ControlPanelViewModel>();
     final snapshot = viewModel.snapshot;
+    final content = Stack(
+      children: [
+        ColoredBox(
+          color: CupertinoColors.white,
+          child: Row(
+            children: [
+              AppSidebar(
+                selectedSection: viewModel.selectedSection,
+                onSelectSection: viewModel.selectSection,
+                onLogout: viewModel.logout,
+              ),
+              Expanded(
+                child: snapshot == null
+                    ? const _LoadingContent()
+                    : switch (viewModel.selectedSection) {
+                        ControlPanelSection.dashboard => _ContentArea(
+                          snapshot: snapshot,
+                          isWorking: viewModel.isWorking,
+                          errorMessage: viewModel.errorMessage,
+                          onRefresh: viewModel.refresh,
+                          onInitialize: viewModel.initialize,
+                          onInstallRootCertificate:
+                              viewModel.installRootCertificate,
+                        ),
+                        ControlPanelSection.settings => SettingsPage(
+                          snapshot: snapshot,
+                          isWorking: viewModel.isWorking,
+                          onRefresh: viewModel.refresh,
+                          onInstallRootCertificate:
+                              viewModel.installRootCertificate,
+                          onOpenAdminConsole: () {
+                            viewModel.openAdminConsole();
+                          },
+                          onLogout: viewModel.logout,
+                        ),
+                      },
+              ),
+            ],
+          ),
+        ),
+        if (viewModel.shouldShowLogin)
+          LoginOverlay(
+            isLoading: viewModel.isLoggingIn,
+            errorMessage: viewModel.loginErrorMessage,
+            onLogin: viewModel.login,
+            onExit: windowManager.destroy,
+          ),
+      ],
+    );
 
     return CupertinoPageScaffold(
-      child: Stack(
-        children: [
-          ColoredBox(
-            color: CupertinoColors.white,
-            child: Row(
+      child: Platform.isWindows
+          ? Column(
               children: [
-                AppSidebar(
-                  selectedSection: viewModel.selectedSection,
-                  onSelectSection: viewModel.selectSection,
-                  onLogout: viewModel.logout,
-                ),
-                Expanded(
-                  child: snapshot == null
-                      ? const _LoadingContent()
-                      : switch (viewModel.selectedSection) {
-                          ControlPanelSection.dashboard => _ContentArea(
-                            snapshot: snapshot,
-                            isWorking: viewModel.isWorking,
-                            errorMessage: viewModel.errorMessage,
-                            onRefresh: viewModel.refresh,
-                            onInitialize: viewModel.initialize,
-                            onInstallRootCertificate:
-                                viewModel.installRootCertificate,
-                          ),
-                          ControlPanelSection.settings => SettingsPage(
-                            snapshot: snapshot,
-                            isWorking: viewModel.isWorking,
-                            onRefresh: viewModel.refresh,
-                            onInstallRootCertificate:
-                                viewModel.installRootCertificate,
-                            onOpenAdminConsole: () {
-                              viewModel.openAdminConsole();
-                            },
-                            onLogout: viewModel.logout,
-                          ),
-                        },
-                ),
+                const _WindowsTitleBar(),
+                Expanded(child: content),
               ],
-            ),
+            )
+          : content,
+    );
+  }
+}
+
+class _WindowsTitleBar extends StatelessWidget {
+  const _WindowsTitleBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      height: kWindowCaptionHeight,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: 190,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Color(0xFFF4F4F6),
+                    border: Border(right: BorderSide(color: Color(0xFFD7D7DB))),
+                  ),
+                ),
+              ),
+              Expanded(child: ColoredBox(color: CupertinoColors.white)),
+            ],
           ),
-          if (viewModel.shouldShowLogin)
-            LoginOverlay(
-              isLoading: viewModel.isLoggingIn,
-              errorMessage: viewModel.loginErrorMessage,
-              onLogin: viewModel.login,
-              onExit: windowManager.destroy,
-            ),
+          WindowCaption(
+            backgroundColor: Color(0x00000000),
+            brightness: Brightness.light,
+          ),
         ],
       ),
     );
