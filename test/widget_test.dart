@@ -1,29 +1,24 @@
+import 'package:desktop/app/app_service.dart';
+import 'package:desktop/app/app_view_model.dart';
+import 'package:desktop/app/models/account_summary.dart';
+import 'package:desktop/app/models/app_snapshot.dart';
+import 'package:desktop/app/models/local_status.dart';
+import 'package:desktop/data/models/account_models.dart';
+import 'package:desktop/data/models/dashboard_models.dart';
+import 'package:desktop/data/models/pack_models.dart';
+import 'package:desktop/features/shell/app_shell.dart';
+import 'package:desktop/system/codex_config_manager.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-
-import 'package:desktop/core/api/api_client.dart';
-import 'package:desktop/core/session/session_store.dart';
-import 'package:desktop/features/models/account_models.dart';
-import 'package:desktop/features/api/auth_api.dart';
-import 'package:desktop/features/api/codex_auth_api.dart';
-import 'package:desktop/features/models/control_panel_models.dart';
-import 'package:desktop/features/pages/control_panel_page.dart';
-import 'package:desktop/features/services/control_panel_service.dart';
-import 'package:desktop/features/view_models/control_panel_view_model.dart';
-import 'package:desktop/features/api/dashboard_api.dart';
-import 'package:desktop/features/models/dashboard_models.dart';
-import 'package:desktop/features/models/pack_models.dart';
-import 'package:desktop/features/api/user_pack_api.dart';
 
 void main() {
   testWidgets('shows running control panel state', (tester) async {
     await tester.pumpWidget(
       ChangeNotifierProvider(
         create: (_) =>
-            ControlPanelViewModel(service: _FakeControlPanelService())
-              ..bootstrap(),
-        child: const CupertinoApp(home: ControlPanelPage()),
+            AppViewModel(service: _FakeAppService())..bootstrap(),
+        child: const CupertinoApp(home: AppShell()),
       ),
     );
 
@@ -36,26 +31,13 @@ void main() {
   });
 }
 
-class _FakeControlPanelService extends ControlPanelService {
-  _FakeControlPanelService()
-    : super(
-        sessionStore: const SessionStore(),
-        authApi: AuthApi(_client),
-        codexAuthApi: CodexAuthApi(_client),
-        dashboardApi: DashboardApi(_client),
-        userPackApi: UserPackApi(_client),
-      );
-
-  static final _client = ApiClient(
-    baseUri: Uri.parse('http://127.0.0.1:8080/api'),
-  );
-
+class _FakeAppService implements AppService {
   @override
   Future<bool> hasSession() async => true;
 
   @override
-  Future<ControlPanelSnapshot> loadSnapshot() async {
-    return const ControlPanelSnapshot(
+  Future<AppSnapshot> loadSnapshot() async {
+    return const AppSnapshot(
       state: RuntimeState.running,
       account: AccountSummary(
         account: 'mirrorstages@example.com',
@@ -80,6 +62,7 @@ class _FakeControlPanelService extends ControlPanelService {
         claudeDirectoryPath: '/Users/test/.claude',
         isCodexInstalled: true,
         isClaudeInstalled: true,
+        canRestoreCodexConfig: false,
         rootCertificate: RootCertificateStatus(
           assetPath: 'assets/ca/mirrorstages-root-ca.cer',
           isInstalled: true,
@@ -124,5 +107,33 @@ class _FakeControlPanelService extends ControlPanelService {
         ],
       ),
     );
+  }
+
+  @override
+  Future<void> login({required String account, required String password}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> logout() async {}
+
+  @override
+  Future<void> openAdminConsole() {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> installRootCertificate() {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> initializeLocalProxyEnv() {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> restoreOriginalConfig() {
+    throw UnimplementedError();
   }
 }
