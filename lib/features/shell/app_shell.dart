@@ -24,11 +24,14 @@ class AppShell extends StatelessWidget {
         ColoredBox(
           color: CupertinoColors.white,
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               AppSidebar(
                 selectedSection: viewModel.selectedSection,
                 onSelectSection: viewModel.selectSection,
+                onOpenAccount: viewModel.openAdminConsole,
                 onLogout: viewModel.logout,
+                account: snapshot?.account,
               ),
               Expanded(
                 child: snapshot == null
@@ -39,7 +42,8 @@ class AppShell extends StatelessWidget {
                           isWorking: viewModel.isWorking,
                           errorMessage: viewModel.errorMessage,
                           onRefresh: viewModel.refresh,
-                          onInitialize: viewModel.initialize,
+                          onApplyCodexBilling: viewModel.applyCodexBilling,
+                          onApplyClaudeBilling: viewModel.applyClaudeBilling,
                           onInstallRootCertificate:
                               viewModel.installRootCertificate,
                         ),

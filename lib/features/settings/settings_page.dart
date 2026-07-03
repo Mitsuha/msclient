@@ -140,10 +140,10 @@ class _CodexSettings extends StatelessWidget {
           const RowDivider(),
           StatusRow(
             label: 'MirrorStages 授权',
-            description: snapshot.initialization.isInitialized
+            description: snapshot.codex.isInitialized
                 ? 'Codex 已配置 MirrorStages 授权和代理环境。'
                 : '需要初始化后才能使用 MirrorStages 账号运行 Codex。',
-            enabled: snapshot.initialization.isInitialized,
+            enabled: snapshot.codex.isInitialized,
             enabledText: '已初始化',
             disabledText: '未初始化',
           ),
@@ -152,7 +152,7 @@ class _CodexSettings extends StatelessWidget {
         StatusRow(
           label: '恢复原始配置',
           description: configuration.canRestoreCodexConfig
-              ? '将初始化前备份的 auth.json / config.toml 移回并覆盖当前配置。'
+              ? '将恢复到初始化之前的配置。'
               : '暂无可恢复的备份，初始化后才会生成 old_config 备份。',
           enabled: true,
           enabledText: '',
@@ -180,9 +180,7 @@ class _CodexSettings extends StatelessWidget {
       builder: (dialogContext) => CupertinoAlertDialog(
         title: const Text('恢复原始配置'),
         content: const Text(
-          '此操作会删除当前的 auth.json / config.toml，'
-          '并从 old_config 备份恢复初始化前的配置。'
-          '恢复后需重新初始化才能继续使用 MirrorStages 账号运行 Codex。',
+          '将恢复到初始化之前的配置，恢复后需要重新初始化才能运行'
         ),
         actions: [
           CupertinoDialogAction(
@@ -211,14 +209,28 @@ class _ClaudeSettings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final configuration = snapshot.localConfiguration;
-    return StatusRow(
-      label: 'Claude 客户端',
-      description: configuration.isClaudeInstalled
-          ? '已检测到本机 Claude 配置目录。'
-          : '未检测到 Claude，本功能不会影响 Codex 使用。',
-      enabled: configuration.isClaudeInstalled,
-      enabledText: '已安装',
-      disabledText: '未安装',
+    return Column(
+      children: [
+        StatusRow(
+          label: 'Claude 客户端',
+          description: configuration.isClaudeInstalled
+              ? '已检测到本机 Claude 配置目录。'
+              : '未检测到 Claude，本功能不会影响 Codex 使用。',
+          enabled: configuration.isClaudeInstalled,
+          enabledText: '已安装',
+          disabledText: '未安装',
+        ),
+        const RowDivider(),
+        StatusRow(
+          label: 'MirrorStages 授权',
+          description: snapshot.claude.isInitialized
+              ? 'Claude Code 已配置 MirrorStages 授权凭据。'
+              : '需要初始化后才能使用 MirrorStages 账号运行 Claude Code。',
+          enabled: snapshot.claude.isInitialized,
+          enabledText: '已初始化',
+          disabledText: '未初始化',
+        ),
+      ],
     );
   }
 }

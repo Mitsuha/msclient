@@ -58,9 +58,23 @@ class AppViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> initialize() async {
-    await _run(() async {
-      await _service.initializeLocalProxyEnv();
+  /// Applies the chosen billing method to Codex by rewriting its credentials.
+  /// [userPackId] is 0 for pay-as-you-go (按量计费) or a subscription pack id.
+  /// Returns true when the credentials were rewritten successfully.
+  Future<bool> applyCodexBilling(int userPackId) {
+    return _run(() async {
+      await _service.initializeLocalProxyEnv(userPackId: userPackId);
+      return _service.loadSnapshot();
+    });
+  }
+
+  /// Applies the chosen billing method to Claude Code by rewriting its
+  /// credentials. [userPackId] is 0 for pay-as-you-go (按量计费) or a
+  /// subscription pack id. Returns true when the credentials were rewritten
+  /// successfully.
+  Future<bool> applyClaudeBilling(int userPackId) {
+    return _run(() async {
+      await _service.initializeClaude(userPackId: userPackId);
       return _service.loadSnapshot();
     });
   }
@@ -121,13 +135,17 @@ class AppViewModel extends ChangeNotifier {
     await _service.openAdminConsole();
   }
 
-  Future<void> _run(Future<AppSnapshot> Function() action) async {
+  /// Runs [action] with the working flag raised, capturing failures into
+  /// [errorMessage]. Returns true when [action] completed without error.
+  Future<bool> _run(Future<AppSnapshot> Function() action) async {
     _isWorking = true;
     _errorMessage = null;
     notifyListeners();
 
+    var succeeded = false;
     try {
       _snapshot = await action();
+      succeeded = true;
     } on UnauthenticatedException {
       _isAuthenticated = false;
       _snapshot = null;
@@ -137,6 +155,7 @@ class AppViewModel extends ChangeNotifier {
       _isWorking = false;
       notifyListeners();
     }
+    return succeeded;
   }
 
   String _loginMessageFor(ApiException error) {

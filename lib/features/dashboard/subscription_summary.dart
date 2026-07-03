@@ -15,10 +15,32 @@ class SubscriptionSummary extends StatelessWidget {
       return const _EmptySubscription();
     }
 
-    final pack = packs.first;
+    return Column(
+      children: [
+        for (var i = 0; i < packs.length; i++) ...[
+          if (i > 0)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 14),
+              child: _Divider(),
+            ),
+          _PackRow(pack: packs[i]),
+        ],
+      ],
+    );
+  }
+}
+
+class _PackRow extends StatelessWidget {
+  const _PackRow({required this.pack});
+
+  final UserPack pack;
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SummaryIcon(
             icon: CupertinoIcons.sparkles,
@@ -30,46 +52,107 @@ class SubscriptionSummary extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  pack.product.name,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        pack.product.name,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      packStatusText(pack.status),
+                      style: TextStyle(
+                        color: packStatusColor(pack.status),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  _packSubtitle(pack),
-                  style: const TextStyle(
-                    color: Color(0xFF6E6E73),
-                    fontSize: 12,
-                  ),
+                const SizedBox(height: 8),
+                _UsageBar(
+                  remain: pack.remainAmount,
+                  total: pack.product.balance,
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '剩余额度 ${_amount(pack.remainAmount)} / ${_amount(pack.product.balance)}',
+                        style: const TextStyle(
+                          color: Color(0xFF6E6E73),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    if (pack.expireAt != null) ...[
+                      const SizedBox(width: 12),
+                      Text(
+                        '有效期至 ${formatDate(pack.expireAt!)}',
+                        style: const TextStyle(
+                          color: Color(0xFF6E6E73),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            packStatusText(pack.status),
-            style: TextStyle(
-              color: packStatusColor(pack.status),
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  String _packSubtitle(UserPack pack) {
-    final expireAt = pack.expireAt;
-    if (expireAt == null) {
-      return '剩余额度 ${pack.remainAmount}';
-    }
-    return '有效期至 ${formatDate(expireAt)}';
+/// Thin progress bar showing how much of a pack's balance remains.
+class _UsageBar extends StatelessWidget {
+  const _UsageBar({required this.remain, required this.total});
+
+  final num remain;
+  final num total;
+
+  @override
+  Widget build(BuildContext context) {
+    final fraction = total > 0 ? (remain / total).clamp(0.0, 1.0) : 0.0;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(3),
+      child: Container(
+        height: 6,
+        color: const Color(0xFFE8F2FF),
+        child: FractionallySizedBox(
+          alignment: Alignment.centerLeft,
+          widthFactor: fraction.toDouble(),
+          child: Container(color: const Color(0xFF007AFF)),
+        ),
+      ),
+    );
   }
+}
+
+class _Divider extends StatelessWidget {
+  const _Divider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(height: 1, color: const Color(0xFFF2F2F7));
+  }
+}
+
+/// Renders a balance without a trailing ".0" for whole numbers.
+String _amount(num value) {
+  if (value == value.roundToDouble()) {
+    return value.toInt().toString();
+  }
+  return value.toString();
 }
 
 class _EmptySubscription extends StatelessWidget {

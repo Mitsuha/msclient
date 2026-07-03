@@ -1,123 +1,58 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:desktop/app/models/tool_status.dart';
+import 'package:desktop/core/utils/json_coercion.dart';
 import 'package:desktop/core/utils/jwt.dart';
 import 'package:desktop/system/codex_config_backup.dart';
 import 'package:desktop/system/env_file.dart';
 import 'package:desktop/system/home_directory.dart';
-
-/// File-level state of `~/.codex` as it relates to MirrorStages.
-class InitializationStatus {
-  const InitializationStatus({
-    required this.authPath,
-    required this.envPath,
-    required this.configPath,
-    required this.hasAuthFile,
-    required this.hasAccessToken,
-    required this.hasAccountSharingMemberId,
-    required this.hasHttpProxy,
-    required this.hasHttpsProxy,
-    required this.hasCodexProviderOverride,
-  });
-
-  final String authPath;
-  final String envPath;
-  final String configPath;
-  final bool hasAuthFile;
-  final bool hasAccessToken;
-  final bool hasAccountSharingMemberId;
-  final bool hasHttpProxy;
-  final bool hasHttpsProxy;
-  final bool hasCodexProviderOverride;
-
-  bool get isInitialized =>
-      hasAccessToken &&
-      hasAccountSharingMemberId &&
-      hasHttpProxy &&
-      hasHttpsProxy &&
-      !hasCodexProviderOverride;
-}
+import 'package:desktop/system/tool_config_manager.dart';
 
 /// Reads and mutates the local Codex configuration under `~/.codex`
 /// (auth.json, .env, config.toml), including backup/restore of the user's
 /// pre-MirrorStages originals.
-class CodexConfigManager {
+class CodexConfigManager implements ToolConfigManager {
   CodexConfigManager({required this._home});
 
   final HomeDirectory _home;
 
-  Future<String> codexDirectoryPath() async =>
-      '${await _home.resolve()}/.codex';
+  @override
+  Future<String> directoryPath() async => '${await _home.resolve()}/.codex';
 
-  Future<String> claudeDirectoryPath() async =>
-      '${await _home.resolve()}/.claude';
-
-  Future<bool> isCodexInstalled() async =>
-      Directory(await codexDirectoryPath()).exists();
-
-  Future<bool> isClaudeInstalled() async =>
-      Directory(await claudeDirectoryPath()).exists();
+  @override
+  Future<bool> isInstalled() async =>
+      Directory(await directoryPath()).exists();
 
   Future<bool> hasRestorableBackup() async => CodexConfigBackup(
-    Directory(await codexDirectoryPath()),
+    Directory(await directoryPath()),
   ).hasRestorableBackup();
 
-  Future<InitializationStatus> readInitializationStatus() async {
-    final codexPath = await codexDirectoryPath();
-    final authPath = '$codexPath/auth.json';
-    final envPath = '$codexPath/.env';
-    final configPath = '$codexPath/config.toml';
-    final authFile = File(authPath);
-    final envFile = File(envPath);
-    final configFile = File(configPath);
-
-    var hasAccessToken = false;
-    var hasAccountSharingMemberId = false;
-    if (await authFile.exists()) {
-      final jsonText = await authFile.readAsString();
-      final auth = jsonDecode(jsonText);
-      final tokenValue = auth is Map<String, dynamic>
-          ? auth['tokens'] is Map<String, dynamic>
-                ? (auth['tokens'] as Map<String, dynamic>)['access_token']
-                : null
-          : null;
-      final token = tokenValue is String ? tokenValue : null;
-      hasAccessToken = token != null && token.isNotEmpty;
-      final payload = hasAccessToken ? decodeJwtPayload(token) : null;
-      hasAccountSharingMemberId =
-          payload?.containsKey('account_sharing_member_id') ?? false;
+  /// Reads `auth.json`, decodes the account from its id token, and reports the
+  /// Codex initialization state.
+  ///
+  /// Any failure along the way — the file is missing, the JSON is malformed,
+  /// there is no id token, or the token's JWT cannot be decoded — is treated as
+  /// [ToolStatus.uninitialized] rather than surfaced as an error.
+  @override
+  Future<ToolStatus> readStatus() async {
+    try {
+      final authFile = File('${await directoryPath()}/auth.json');
+      final auth = jsonDecode(await authFile.readAsString());
+      final token = _idTokenFrom(auth);
+      if (token == null || token.isEmpty) {
+        return const ToolStatus.uninitialized();
+      }
+      final payload = decodeJwtPayload(token);
+      if (payload == null) {
+        return const ToolStatus.uninitialized();
+      }
+      return ToolStatus.initialized(
+        _accountFrom(payload, _userPackIdFrom(auth)),
+      );
+    } catch (_) {
+      return const ToolStatus.uninitialized();
     }
-
-    final env = await _readEnv(envFile);
-    final hasCodexProviderOverride = await _hasCodexProviderOverride(
-      configFile,
-    );
-    return InitializationStatus(
-      authPath: authPath,
-      envPath: envPath,
-      configPath: configPath,
-      hasAuthFile: await authFile.exists(),
-      hasAccessToken: hasAccessToken,
-      hasAccountSharingMemberId: hasAccountSharingMemberId,
-      hasHttpProxy: env['http_proxy']?.isNotEmpty == true,
-      hasHttpsProxy: env['https_proxy']?.isNotEmpty == true,
-      hasCodexProviderOverride: hasCodexProviderOverride,
-    );
-  }
-
-  Future<InitializationStatus> emptyInitializationStatus() async {
-    final codexPath = await codexDirectoryPath();
-    return InitializationStatus(
-      authPath: '$codexPath/auth.json',
-      envPath: '$codexPath/.env',
-      configPath: '$codexPath/config.toml',
-      hasAuthFile: false,
-      hasAccessToken: false,
-      hasAccountSharingMemberId: false,
-      hasHttpProxy: false,
-      hasHttpsProxy: false,
-      hasCodexProviderOverride: false,
-    );
   }
 
   /// Writes the MirrorStages auth.json and proxy env entries, removing any
@@ -126,7 +61,7 @@ class CodexConfigManager {
     required Map<String, dynamic> codexAuth,
     required String proxyUrl,
   }) async {
-    final codexDirectory = Directory(await codexDirectoryPath());
+    final codexDirectory = Directory(await directoryPath());
     final authFile = File('${codexDirectory.path}/auth.json');
     final envFile = File('${codexDirectory.path}/.env');
     final configFile = File('${codexDirectory.path}/config.toml');
@@ -159,7 +94,7 @@ class CodexConfigManager {
   /// originals back into place. Throws [CodexConfigRestoreException] when
   /// there is no backup to restore.
   Future<void> restoreOriginals() async {
-    final backup = CodexConfigBackup(Directory(await codexDirectoryPath()));
+    final backup = CodexConfigBackup(Directory(await directoryPath()));
     if (!await backup.hasRestorableBackup()) {
       throw const CodexConfigRestoreException('未找到可恢复的原始 Codex 配置。');
     }
@@ -173,13 +108,58 @@ class CodexConfigManager {
     return parseEnvLines(await file.readAsLines());
   }
 
-  Future<bool> _hasCodexProviderOverride(File file) async {
-    if (!await file.exists()) {
-      return false;
+  /// Extracts `tokens.id_token` from the decoded `auth.json`.
+  String? _idTokenFrom(Object? auth) {
+    if (auth is! Map) {
+      return null;
     }
+    final tokens = auth['tokens'];
+    if (tokens is! Map) {
+      return null;
+    }
+    final token = tokens['id_token'];
+    return token is String ? token : null;
+  }
 
-    final text = await file.readAsString();
-    return text.contains('base_url') && text.contains('model_provider');
+  /// Decodes `tokens.access_token` and reads its `user_pack_id` claim, or 0
+  /// when the token is absent, cannot be decoded, or carries no pack id
+  /// (pay-as-you-go / 按量计费).
+  int _userPackIdFrom(Object? auth) {
+    if (auth is! Map) {
+      return 0;
+    }
+    final tokens = auth['tokens'];
+    if (tokens is! Map) {
+      return 0;
+    }
+    final accessToken = tokens['access_token'];
+    if (accessToken is! String || accessToken.isEmpty) {
+      return 0;
+    }
+    final payload = decodeJwtPayload(accessToken);
+    if (payload == null) {
+      return 0;
+    }
+    return jsonInt(payload['user_pack_id']);
+  }
+
+  ToolAccount _accountFrom(Map<String, dynamic> payload, int userPackId) {
+    final auth = payload['https://api.openai.com/auth'];
+    final planType = auth is Map ? auth['chatgpt_plan_type']?.toString() : null;
+    return ToolAccount(
+      email: payload['email']?.toString() ?? '',
+      name: payload['name']?.toString() ?? '',
+      planType: _planLabel(planType),
+      userPackId: userPackId,
+    );
+  }
+
+  /// The display label for a Codex plan: capitalized, or `未知` when absent.
+  String _planLabel(String? planType) {
+    if (planType == null || planType.isEmpty) {
+      return '未知';
+    }
+    return planType[0].toUpperCase() + planType.substring(1);
   }
 
   String _prettyJson(Map<String, dynamic> json) {

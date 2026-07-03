@@ -1,5 +1,5 @@
 import 'package:desktop/app/models/app_snapshot.dart';
-import 'package:desktop/features/dashboard/runtime_state_presentation.dart';
+import 'package:desktop/features/dashboard/environment_status_presentation.dart';
 import 'package:desktop/ui/widgets/app_button.dart';
 import 'package:flutter/cupertino.dart';
 
@@ -9,7 +9,6 @@ class StatusAlert extends StatelessWidget {
     required this.snapshot,
     required this.isWorking,
     required this.onRefresh,
-    required this.onInitialize,
     required this.onInstallRootCertificate,
     this.errorMessage,
   });
@@ -17,13 +16,12 @@ class StatusAlert extends StatelessWidget {
   final AppSnapshot snapshot;
   final bool isWorking;
   final VoidCallback onRefresh;
-  final VoidCallback onInitialize;
   final VoidCallback onInstallRootCertificate;
   final String? errorMessage;
 
   @override
   Widget build(BuildContext context) {
-    final style = RuntimeStatePresentation.of(snapshot.state);
+    final style = EnvironmentStatusPresentation.of(snapshot.environment);
     final message = errorMessage ?? snapshot.message ?? style.defaultMessage;
 
     return Container(
@@ -64,7 +62,7 @@ class StatusAlert extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          if (snapshot.state == RuntimeState.conflict)
+          if (snapshot.environment == EnvironmentStatus.conflict)
             AppButton(
               label: '重新检查',
               compact: true,
@@ -72,21 +70,14 @@ class StatusAlert extends StatelessWidget {
               disabledColor: const Color(0xFFFFB3AD),
               onPressed: isWorking ? null : onRefresh,
             )
-          else if (snapshot.state == RuntimeState.rootCertificateMissing)
+          else if (snapshot.environment ==
+              EnvironmentStatus.rootCertificateMissing)
             AppButton(
               label: '安装证书',
               compact: true,
               color: const Color(0xFFFF9500),
               disabledColor: const Color(0xFFFFD59A),
               onPressed: isWorking ? null : onInstallRootCertificate,
-            )
-          else if (snapshot.state == RuntimeState.uninitialized)
-            AppButton(
-              label: '初始化',
-              compact: true,
-              color: const Color(0xFFFF9500),
-              disabledColor: const Color(0xFFFFD59A),
-              onPressed: isWorking ? null : onInitialize,
             )
           else
             Text(

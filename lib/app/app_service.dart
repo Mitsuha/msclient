@@ -5,11 +5,13 @@ import 'package:desktop/app/models/app_snapshot.dart';
 import 'package:desktop/app/models/local_status.dart';
 import 'package:desktop/core/api/api_client.dart';
 import 'package:desktop/data/api/auth_api.dart';
+import 'package:desktop/data/api/claude_auth_api.dart';
 import 'package:desktop/data/api/codex_auth_api.dart';
 import 'package:desktop/data/api/dashboard_api.dart';
 import 'package:desktop/data/api/user_pack_api.dart';
 import 'package:desktop/data/models/account_models.dart';
 import 'package:desktop/data/session/session_store.dart';
+import 'package:desktop/system/claude_config_manager.dart';
 import 'package:desktop/system/codex_config_manager.dart';
 import 'package:desktop/system/external_browser.dart';
 import 'package:desktop/system/home_directory.dart';
@@ -24,11 +26,13 @@ class AppService {
     required this._sessionStore,
     required this._authApi,
     required this._codexAuthApi,
+    required this._claudeAuthApi,
     required this._dashboardApi,
     required this._userPackApi,
     required this._processInspector,
     required this._rootCertificate,
     required this._codexConfig,
+    required this._claudeConfig,
     required this._browser,
   });
 
@@ -40,6 +44,7 @@ class AppService {
       sessionStore: const SessionStore(),
       authApi: AuthApi(client),
       codexAuthApi: CodexAuthApi(client),
+      claudeAuthApi: ClaudeAuthApi(client),
       dashboardApi: DashboardApi(client),
       userPackApi: UserPackApi(client),
       processInspector: const ConflictProcessInspector(),
@@ -48,6 +53,7 @@ class AppService {
         assetPath: AppConfig.rootCertificateAssetPath,
       ),
       codexConfig: CodexConfigManager(home: home),
+      claudeConfig: ClaudeConfigManager(home: home),
       browser: const ExternalBrowser(),
     );
   }
@@ -55,11 +61,13 @@ class AppService {
   final SessionStore _sessionStore;
   final AuthApi _authApi;
   final CodexAuthApi _codexAuthApi;
+  final ClaudeAuthApi _claudeAuthApi;
   final DashboardApi _dashboardApi;
   final UserPackApi _userPackApi;
   final ConflictProcessInspector _processInspector;
   final RootCertificateManager _rootCertificate;
   final CodexConfigManager _codexConfig;
+  final ClaudeConfigManager _claudeConfig;
   final ExternalBrowser _browser;
 
   Future<bool> hasSession() async {
@@ -110,22 +118,20 @@ class AppService {
         localCheckError = error.toString();
       }
 
-      final initialization = await _readInitializationStatusSafely(
-        currentError: localCheckError,
-        onError: (error) => localCheckError = error,
-      );
+      final codex = await _codexConfig.readStatus();
+      final claude = await _claudeConfig.readStatus();
       final localConfiguration = await _readLocalConfigurationStatus();
-      final state = deriveState(
+      final environment = deriveEnvironment(
         hasConflicts: conflicts.isNotEmpty,
         certificateInstalled: localConfiguration.rootCertificate.isInstalled,
         hasLocalError: localCheckError.isNotEmpty,
-        isInitialized: initialization.isInitialized,
       );
 
       return AppSnapshot(
-        state: state,
+        environment: environment,
         account: AccountSummary.fromDashboard(dashboard),
-        initialization: initialization,
+        codex: codex,
+        claude: claude,
         localConfiguration: localConfiguration,
         dashboard: dashboard,
         conflicts: conflicts,
@@ -137,73 +143,79 @@ class AppService {
         throw const UnauthenticatedException();
       }
       return AppSnapshot(
-        state: RuntimeState.error,
+        environment: EnvironmentStatus.error,
         account: _accountFor(session.user),
-        initialization: await _codexConfig.emptyInitializationStatus(),
+        codex: await _codexConfig.readStatus(),
+        claude: await _claudeConfig.readStatus(),
         localConfiguration: await _emptyLocalConfigurationStatus(),
         message: error.toString(),
       );
     } catch (error) {
       return AppSnapshot(
-        state: RuntimeState.error,
+        environment: EnvironmentStatus.error,
         account: _accountFor(session.user),
-        initialization: await _codexConfig.emptyInitializationStatus(),
+        codex: await _codexConfig.readStatus(),
+        claude: await _claudeConfig.readStatus(),
         localConfiguration: await _emptyLocalConfigurationStatus(),
         message: error.toString(),
       );
     }
   }
 
-  /// Priority order of the runtime states shown in the dashboard banner.
+  /// Priority order of the environment states shown in the dashboard banner.
   @visibleForTesting
-  static RuntimeState deriveState({
+  static EnvironmentStatus deriveEnvironment({
     required bool hasConflicts,
     required bool certificateInstalled,
     required bool hasLocalError,
-    required bool isInitialized,
   }) {
     return hasConflicts
-        ? RuntimeState.conflict
+        ? EnvironmentStatus.conflict
         : !certificateInstalled
-        ? RuntimeState.rootCertificateMissing
+        ? EnvironmentStatus.rootCertificateMissing
         : hasLocalError
-        ? RuntimeState.error
-        : isInitialized
-        ? RuntimeState.running
-        : RuntimeState.uninitialized;
+        ? EnvironmentStatus.error
+        : EnvironmentStatus.ready;
   }
 
-  Future<void> initializeLocalProxyEnv() async {
+  /// (Re)writes the local Codex credentials billed against [userPackId], where
+  /// 0 is pay-as-you-go (按量计费) and any other value is a subscription pack.
+  Future<void> initializeLocalProxyEnv({int userPackId = 0}) async {
     final session = await _sessionStore.load();
     if (session == null) {
       throw const UnauthenticatedException();
     }
 
-    final codexAuth = await _codexAuthApi.createAuth(token: session.token);
+    final codexAuth = await _codexAuthApi.createAuth(
+      token: session.token,
+      userPackId: userPackId,
+    );
     await _codexConfig.initialize(
       codexAuth: codexAuth,
       proxyUrl: AppConfig.proxyUrl,
     );
   }
 
+  /// (Re)writes the local Claude Code credentials billed against [userPackId],
+  /// where 0 is pay-as-you-go (按量计费) and any other value is a subscription
+  /// pack.
+  Future<void> initializeClaude({int userPackId = 0}) async {
+    final session = await _sessionStore.load();
+    if (session == null) {
+      throw const UnauthenticatedException();
+    }
+
+    final claudeAuth = await _claudeAuthApi.createAuth(
+      token: session.token,
+      userPackId: userPackId,
+    );
+    await _claudeConfig.initialize(claudeAuth: claudeAuth);
+  }
+
   /// Restores the user's original Codex configuration from
   /// `~/.codex/old_config`. Throws [CodexConfigRestoreException] when there is
   /// no backup to restore.
   Future<void> restoreOriginalConfig() => _codexConfig.restoreOriginals();
-
-  Future<InitializationStatus> _readInitializationStatusSafely({
-    required String currentError,
-    required void Function(String error) onError,
-  }) async {
-    try {
-      return await _codexConfig.readInitializationStatus();
-    } catch (error) {
-      if (currentError.isEmpty) {
-        onError(error.toString());
-      }
-      return _codexConfig.emptyInitializationStatus();
-    }
-  }
 
   AccountSummary _accountFor(UserProfile user) {
     return AccountSummary(
@@ -217,10 +229,10 @@ class AppService {
 
   Future<LocalConfigurationStatus> _readLocalConfigurationStatus() async {
     return LocalConfigurationStatus(
-      codexDirectoryPath: await _codexConfig.codexDirectoryPath(),
-      claudeDirectoryPath: await _codexConfig.claudeDirectoryPath(),
-      isCodexInstalled: await _codexConfig.isCodexInstalled(),
-      isClaudeInstalled: await _codexConfig.isClaudeInstalled(),
+      codexDirectoryPath: await _codexConfig.directoryPath(),
+      claudeDirectoryPath: await _claudeConfig.directoryPath(),
+      isCodexInstalled: await _codexConfig.isInstalled(),
+      isClaudeInstalled: await _claudeConfig.isInstalled(),
       canRestoreCodexConfig: await _codexConfig.hasRestorableBackup(),
       rootCertificate: RootCertificateStatus(
         assetPath: _rootCertificate.assetPath,
@@ -231,8 +243,8 @@ class AppService {
 
   Future<LocalConfigurationStatus> _emptyLocalConfigurationStatus() async {
     return LocalConfigurationStatus(
-      codexDirectoryPath: await _codexConfig.codexDirectoryPath(),
-      claudeDirectoryPath: await _codexConfig.claudeDirectoryPath(),
+      codexDirectoryPath: await _codexConfig.directoryPath(),
+      claudeDirectoryPath: await _claudeConfig.directoryPath(),
       isCodexInstalled: false,
       isClaudeInstalled: false,
       canRestoreCodexConfig: false,

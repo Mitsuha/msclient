@@ -30,22 +30,27 @@ class AppButton extends StatelessWidget {
         ? const EdgeInsets.symmetric(horizontal: 9, vertical: 5)
         : const EdgeInsets.symmetric(horizontal: 14, vertical: 7);
 
-    return CupertinoButton(
-      minimumSize: Size(compact ? 28 : 76, compact ? 26 : 32),
-      padding: padding,
-      color: color,
-      disabledColor: disabledColor,
-      borderRadius: BorderRadius.circular(6),
-      onPressed: onPressed,
-      child:
-          child ??
-          _ButtonLabel(
-            icon: icon,
-            label: label,
-            color: textColor,
-            fontSize: fontSize,
-            iconSize: iconSize,
-          ),
+    return MouseRegion(
+      cursor: onPressed == null
+          ? SystemMouseCursors.basic
+          : SystemMouseCursors.click,
+      child: CupertinoButton(
+        minimumSize: Size(compact ? 28 : 76, compact ? 26 : 32),
+        padding: padding,
+        color: color,
+        disabledColor: disabledColor,
+        borderRadius: BorderRadius.circular(6),
+        onPressed: onPressed,
+        child:
+            child ??
+            _ButtonLabel(
+              icon: icon,
+              label: label,
+              color: textColor,
+              fontSize: fontSize,
+              iconSize: iconSize,
+            ),
+      ),
     );
   }
 }

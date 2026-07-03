@@ -1,7 +1,7 @@
 import 'package:desktop/app/models/app_snapshot.dart';
-import 'package:desktop/features/dashboard/account_table.dart';
 import 'package:desktop/features/dashboard/status_alert.dart';
 import 'package:desktop/features/dashboard/subscription_summary.dart';
+import 'package:desktop/features/dashboard/tool_card.dart';
 import 'package:desktop/ui/widgets/app_button.dart';
 import 'package:desktop/ui/widgets/section_card.dart';
 import 'package:flutter/cupertino.dart';
@@ -12,7 +12,8 @@ class DashboardPage extends StatelessWidget {
     required this.snapshot,
     required this.isWorking,
     required this.onRefresh,
-    required this.onInitialize,
+    required this.onApplyCodexBilling,
+    required this.onApplyClaudeBilling,
     required this.onInstallRootCertificate,
     this.errorMessage,
   });
@@ -21,55 +22,67 @@ class DashboardPage extends StatelessWidget {
   final bool isWorking;
   final String? errorMessage;
   final VoidCallback onRefresh;
-  final VoidCallback onInitialize;
+  final Future<bool> Function(int userPackId) onApplyCodexBilling;
+  final Future<bool> Function(int userPackId) onApplyClaudeBilling;
   final VoidCallback onInstallRootCertificate;
 
   @override
   Widget build(BuildContext context) {
-    final content = Padding(
-      padding: const EdgeInsets.fromLTRB(28, 22, 28, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _Toolbar(isWorking: isWorking, onRefresh: onRefresh),
-          const SizedBox(height: 18),
-          StatusAlert(
-            snapshot: snapshot,
-            isWorking: isWorking,
-            errorMessage: errorMessage,
-            onRefresh: onRefresh,
-            onInitialize: onInitialize,
-            onInstallRootCertificate: onInstallRootCertificate,
-          ),
-          const SizedBox(height: 18),
-          SectionCard(
-            title: '账户',
-            child: AccountTable(account: snapshot.account),
-          ),
-          const SizedBox(height: 18),
-          SectionCard(
-            title: '订阅',
-            child: SubscriptionSummary(
-              packs: snapshot.dashboard?.packs ?? const [],
+    final packs = snapshot.dashboard?.packs ?? const [];
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(28, 22, 28, 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Toolbar(isWorking: isWorking, onRefresh: onRefresh),
+            const SizedBox(height: 18),
+            StatusAlert(
+              snapshot: snapshot,
+              isWorking: isWorking,
+              errorMessage: errorMessage,
+              onRefresh: onRefresh,
+              onInstallRootCertificate: onInstallRootCertificate,
             ),
-          ),
-          const Spacer(),
-        ],
+            const SizedBox(height: 18),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: ToolCard(
+                      leading: const _CodexBadge(),
+                      title: 'Codex',
+                      subtitle: 'OpenAI CLI',
+                      status: snapshot.codex,
+                      isWorking: isWorking,
+                      packs: packs,
+                      onApplyBilling: onApplyCodexBilling,
+                    ),
+                  ),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    child: ToolCard(
+                      leading: const _ClaudeBadge(),
+                      title: 'Claude Code',
+                      subtitle: 'Anthropic CLI',
+                      status: snapshot.claude,
+                      isWorking: isWorking,
+                      packs: packs,
+                      onApplyBilling: onApplyClaudeBilling,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            SectionCard(
+              title: '订阅',
+              child: SubscriptionSummary(packs: packs),
+            ),
+          ],
+        ),
       ),
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxHeight < 520) {
-          return SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: content,
-            ),
-          );
-        }
-        return content;
-      },
     );
   }
 }
@@ -103,6 +116,56 @@ class _Toolbar extends StatelessWidget {
           onPressed: isWorking ? null : onRefresh,
         ),
       ],
+    );
+  }
+}
+
+/// The dark terminal tile that brands the Codex card.
+class _CodexBadge extends StatelessWidget {
+  const _CodexBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 48,
+      height: 48,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: const Color(0xFF1D1D1F),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Text(
+        '>_',
+        style: TextStyle(
+          color: CupertinoColors.white,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          height: 1,
+        ),
+      ),
+    );
+  }
+}
+
+/// The coral sparkles tile that brands the Claude Code card.
+class _ClaudeBadge extends StatelessWidget {
+  const _ClaudeBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 48,
+      height: 48,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: const Color(0xFFD97757),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Icon(
+        CupertinoIcons.sparkles,
+        color: CupertinoColors.white,
+        size: 24,
+      ),
     );
   }
 }

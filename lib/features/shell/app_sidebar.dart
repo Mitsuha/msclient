@@ -1,6 +1,8 @@
 import 'dart:io';
 
+import 'package:desktop/app/models/account_summary.dart';
 import 'package:desktop/app/models/nav_section.dart';
+import 'package:desktop/features/shell/account_menu.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -9,12 +11,16 @@ class AppSidebar extends StatelessWidget {
     super.key,
     required this.selectedSection,
     required this.onSelectSection,
+    required this.onOpenAccount,
     required this.onLogout,
+    this.account,
   });
 
   final NavSection selectedSection;
   final ValueChanged<NavSection> onSelectSection;
+  final VoidCallback onOpenAccount;
   final VoidCallback onLogout;
+  final AccountSummary? account;
 
   @override
   Widget build(BuildContext context) {
@@ -54,46 +60,12 @@ class AppSidebar extends StatelessWidget {
             onPressed: () => onSelectSection(NavSection.settings),
           ),
           const Spacer(),
-          Padding(
-            padding: const EdgeInsetsGeometry.only(bottom: 8),
-            child: _SidebarAction(
-              icon: CupertinoIcons.square_arrow_right,
-              label: '退出登录',
-              onPressed: onLogout,
+          if (account != null)
+            AccountMenu(
+              account: account!,
+              onOpenAccount: onOpenAccount,
+              onLogout: onLogout,
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SidebarAction extends StatelessWidget {
-  const _SidebarAction({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return CupertinoButton(
-      alignment: Alignment.centerLeft,
-      minimumSize: Size.zero,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      onPressed: onPressed,
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: const Color(0xFF6E6E73)),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: const TextStyle(color: Color(0xFF6E6E73), fontSize: 12),
-          ),
         ],
       ),
     );
@@ -115,31 +87,34 @@ class _SidebarItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoButton(
-      alignment: Alignment.centerLeft,
-      minimumSize: Size.zero,
-      padding: EdgeInsets.zero,
-      onPressed: onPressed,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFFE5E5EA) : null,
-          borderRadius: BorderRadius.circular(7),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 17, color: const Color(0xFF3A3A3C)),
-            const SizedBox(width: 9),
-            Text(
-              label,
-              style: TextStyle(
-                color: const Color(0xFF1D1D1F),
-                fontSize: 13,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: CupertinoButton(
+        alignment: Alignment.centerLeft,
+        minimumSize: Size.zero,
+        padding: EdgeInsets.zero,
+        onPressed: onPressed,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFFE5E5EA) : null,
+            borderRadius: BorderRadius.circular(7),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 17, color: const Color(0xFF3A3A3C)),
+              const SizedBox(width: 9),
+              Text(
+                label,
+                style: TextStyle(
+                  color: const Color(0xFF1D1D1F),
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -3,11 +3,11 @@ import 'package:desktop/app/app_view_model.dart';
 import 'package:desktop/app/models/account_summary.dart';
 import 'package:desktop/app/models/app_snapshot.dart';
 import 'package:desktop/app/models/local_status.dart';
+import 'package:desktop/app/models/tool_status.dart';
 import 'package:desktop/data/models/account_models.dart';
 import 'package:desktop/data/models/dashboard_models.dart';
 import 'package:desktop/data/models/pack_models.dart';
 import 'package:desktop/features/shell/app_shell.dart';
-import 'package:desktop/system/codex_config_manager.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -25,8 +25,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('MirrorStages'), findsOneWidget);
-    expect(find.text('正在运行'), findsOneWidget);
-    expect(find.text('mirrorstages@example.com'), findsOneWidget);
+    expect(find.text('运行环境正常'), findsOneWidget);
+    expect(find.text('mirrorstages@example.com'), findsWidgets);
     expect(find.text('Professional Monthly'), findsOneWidget);
   });
 }
@@ -38,7 +38,7 @@ class _FakeAppService implements AppService {
   @override
   Future<AppSnapshot> loadSnapshot() async {
     return const AppSnapshot(
-      state: RuntimeState.running,
+      environment: EnvironmentStatus.ready,
       account: AccountSummary(
         account: 'mirrorstages@example.com',
         nickname: 'MirrorStages User',
@@ -46,16 +46,19 @@ class _FakeAppService implements AppService {
         planName: 'Professional Monthly',
         planExpiresAt: '2026-07-30',
       ),
-      initialization: InitializationStatus(
-        authPath: '/Users/test/.codex/auth.json',
-        envPath: '/Users/test/.codex/.env',
-        configPath: '/Users/test/.codex/config.toml',
-        hasAuthFile: true,
-        hasAccessToken: true,
-        hasAccountSharingMemberId: true,
-        hasHttpProxy: true,
-        hasHttpsProxy: true,
-        hasCodexProviderOverride: false,
+      codex: ToolStatus.initialized(
+        ToolAccount(
+          email: 'codex@example.com',
+          planType: 'Plus',
+          name: 'Codex User',
+        ),
+      ),
+      claude: ToolStatus.initialized(
+        ToolAccount(
+          email: 'claude@example.com',
+          name: 'claude',
+          planType: 'Max 20X',
+        ),
       ),
       localConfiguration: LocalConfigurationStatus(
         codexDirectoryPath: '/Users/test/.codex',
@@ -128,7 +131,12 @@ class _FakeAppService implements AppService {
   }
 
   @override
-  Future<void> initializeLocalProxyEnv() {
+  Future<void> initializeLocalProxyEnv({int userPackId = 0}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> initializeClaude({int userPackId = 0}) {
     throw UnimplementedError();
   }
 
