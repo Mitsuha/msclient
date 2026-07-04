@@ -14,6 +14,7 @@ class SettingsPage extends StatelessWidget {
     required this.onRefresh,
     required this.onInstallRootCertificate,
     required this.onRestoreCodexConfig,
+    required this.onRestoreClaudeConfig,
     required this.onOpenAdminConsole,
     required this.onLogout,
   });
@@ -24,6 +25,7 @@ class SettingsPage extends StatelessWidget {
   final VoidCallback onRefresh;
   final VoidCallback onInstallRootCertificate;
   final VoidCallback onRestoreCodexConfig;
+  final VoidCallback onRestoreClaudeConfig;
   final VoidCallback onOpenAdminConsole;
   final VoidCallback onLogout;
 
@@ -60,7 +62,11 @@ class SettingsPage extends StatelessWidget {
           const SizedBox(height: 18),
           SectionCard(
             title: 'Claude 配置',
-            child: _ClaudeSettings(snapshot: snapshot),
+            child: _ClaudeSettings(
+              snapshot: snapshot,
+              isWorking: isWorking,
+              onRestoreClaudeConfig: onRestoreClaudeConfig,
+            ),
           ),
           const SizedBox(height: 18),
           SectionCard(
@@ -170,41 +176,18 @@ class _CodexSettings extends StatelessWidget {
       ],
     );
   }
-
-  Future<void> _confirmRestore(
-    BuildContext context,
-    VoidCallback onConfirmed,
-  ) async {
-    final confirmed = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('恢复原始配置'),
-        content: const Text(
-          '将恢复到初始化之前的配置，恢复后需要重新初始化才能运行'
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('恢复'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      onConfirmed();
-    }
-  }
 }
 
 class _ClaudeSettings extends StatelessWidget {
-  const _ClaudeSettings({required this.snapshot});
+  const _ClaudeSettings({
+    required this.snapshot,
+    required this.isWorking,
+    required this.onRestoreClaudeConfig,
+  });
 
   final AppSnapshot snapshot;
+  final bool isWorking;
+  final VoidCallback onRestoreClaudeConfig;
 
   @override
   Widget build(BuildContext context) {
@@ -230,8 +213,56 @@ class _ClaudeSettings extends StatelessWidget {
           enabledText: '已初始化',
           disabledText: '未初始化',
         ),
+        const RowDivider(),
+        StatusRow(
+          label: '恢复原始配置',
+          description: configuration.canRestoreClaudeConfig
+              ? '将恢复到初始化之前的登录凭据和 settings.json。'
+              : '暂无可恢复的备份，初始化后才会生成 old_config 备份。',
+          enabled: true,
+          enabledText: '',
+          disabledText: '',
+          trailing: AppButton(
+            label: '恢复',
+            compact: true,
+            color: const Color(0xFFFF3B30),
+            disabledColor: const Color(0xFFFFC3BF),
+            onPressed: (isWorking || !configuration.canRestoreClaudeConfig)
+                ? null
+                : () => _confirmRestore(context, onRestoreClaudeConfig),
+          ),
+        ),
       ],
     );
+  }
+}
+
+/// Confirms a destructive "restore original config" action, invoking
+/// [onConfirmed] only when the user accepts.
+Future<void> _confirmRestore(
+  BuildContext context,
+  VoidCallback onConfirmed,
+) async {
+  final confirmed = await showCupertinoDialog<bool>(
+    context: context,
+    builder: (dialogContext) => CupertinoAlertDialog(
+      title: const Text('恢复原始配置'),
+      content: const Text('将恢复到初始化之前的配置，恢复后需要重新初始化才能运行'),
+      actions: [
+        CupertinoDialogAction(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('取消'),
+        ),
+        CupertinoDialogAction(
+          isDestructiveAction: true,
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('恢复'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed == true) {
+    onConfirmed();
   }
 }
 

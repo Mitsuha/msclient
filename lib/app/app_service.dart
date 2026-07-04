@@ -209,13 +209,21 @@ class AppService {
       token: session.token,
       userPackId: userPackId,
     );
-    await _claudeConfig.initialize(claudeAuth: claudeAuth);
+    await _claudeConfig.initialize(
+      claudeAuth: claudeAuth,
+      proxyUrl: AppConfig.proxyUrl,
+    );
   }
 
   /// Restores the user's original Codex configuration from
   /// `~/.codex/old_config`. Throws [CodexConfigRestoreException] when there is
   /// no backup to restore.
   Future<void> restoreOriginalConfig() => _codexConfig.restoreOriginals();
+
+  /// Restores the user's original Claude Code configuration from
+  /// `~/.claude/old_config`. Throws [ClaudeConfigRestoreException] when there
+  /// is no backup to restore.
+  Future<void> restoreClaudeConfig() => _claudeConfig.restoreOriginals();
 
   AccountSummary _accountFor(UserProfile user) {
     return AccountSummary(
@@ -234,6 +242,7 @@ class AppService {
       isCodexInstalled: await _codexConfig.isInstalled(),
       isClaudeInstalled: await _claudeConfig.isInstalled(),
       canRestoreCodexConfig: await _codexConfig.hasRestorableBackup(),
+      canRestoreClaudeConfig: await _claudeConfig.hasRestorableBackup(),
       rootCertificate: RootCertificateStatus(
         assetPath: _rootCertificate.assetPath,
         isInstalled: await _rootCertificate.isTrusted(),
@@ -248,6 +257,7 @@ class AppService {
       isCodexInstalled: false,
       isClaudeInstalled: false,
       canRestoreCodexConfig: false,
+      canRestoreClaudeConfig: false,
       rootCertificate: RootCertificateStatus(
         assetPath: _rootCertificate.assetPath,
         isInstalled: false,

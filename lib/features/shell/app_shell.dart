@@ -55,6 +55,7 @@ class AppShell extends StatelessWidget {
                           onInstallRootCertificate:
                               viewModel.installRootCertificate,
                           onRestoreCodexConfig: viewModel.restoreCodexConfig,
+                          onRestoreClaudeConfig: viewModel.restoreClaudeConfig,
                           onOpenAdminConsole: () {
                             viewModel.openAdminConsole();
                           },

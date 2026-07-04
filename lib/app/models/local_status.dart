@@ -5,6 +5,7 @@ class LocalConfigurationStatus {
     required this.isCodexInstalled,
     required this.isClaudeInstalled,
     required this.canRestoreCodexConfig,
+    required this.canRestoreClaudeConfig,
     required this.rootCertificate,
   });
 
@@ -15,6 +16,9 @@ class LocalConfigurationStatus {
 
   /// Whether a `~/.codex/old_config` backup exists that can be restored.
   final bool canRestoreCodexConfig;
+
+  /// Whether a `~/.claude/old_config` backup exists that can be restored.
+  final bool canRestoreClaudeConfig;
   final RootCertificateStatus rootCertificate;
 }
 

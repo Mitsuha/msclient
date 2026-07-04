@@ -30,13 +30,159 @@ class ClaudeConfigManager implements ToolConfigManager {
   Future<String> _credentialsFilePath() async =>
       '${await directoryPath()}/.credentials.json';
 
-  /// Stores [claudeAuth] as the local Claude Code credentials.
-  Future<void> initialize({required Map<String, dynamic> claudeAuth}) async {
+  /// Sub-directory of `~/.claude` that holds the backed-up original config.
+  static const _backupDirectoryName = 'old_config';
+  static const _settingsFileName = 'settings.json';
+  static const _credentialsFileName = '.credentials.json';
+
+  /// Stores [claudeAuth] as the local Claude Code credentials, then routes
+  /// Claude Code through the shared [proxyUrl] by rewriting `settings.json`.
+  ///
+  /// The user's original `settings.json` and credentials (the macOS Keychain
+  /// item, or `.credentials.json` on Windows/Linux) are preserved into
+  /// `~/.claude/old_config` first, so the change can be rolled back.
+  Future<void> initialize({
+    required Map<String, dynamic> claudeAuth,
+    required String proxyUrl,
+  }) async {
+    final claudeDir = await directoryPath();
+    await Directory(claudeDir).create(recursive: true);
+
+    // Preserve the pristine originals before we overwrite anything. For
+    // .credentials.json this must happen before the credential write below,
+    // otherwise the backup would capture the MirrorStages file.
+    await _preserveOriginals(claudeDir);
+
     final credentials = jsonEncode(claudeAuth);
     if (Platform.isMacOS) {
       await _writeToKeychain(credentials);
     } else {
       await _writeToFile(credentials);
+    }
+
+    await _writeSettings(claudeDir, proxyUrl);
+  }
+
+  /// Copies the user's original config into `~/.claude/old_config` once, before
+  /// MirrorStages overwrites it, so the change can be rolled back.
+  ///
+  /// `settings.json` is always a file. Credentials are a file on Windows/Linux
+  /// but live in the macOS Keychain — there we read the current Keychain item
+  /// and snapshot it into `old_config/.credentials.json` so restore can write
+  /// it back. A file is backed up at most once, so repeated initializations
+  /// never clobber the pristine original with a MirrorStages-generated file.
+  Future<void> _preserveOriginals(String claudeDir) async {
+    final backupDir = Directory('$claudeDir/$_backupDirectoryName');
+
+    await _backupFileOnce(
+      live: File('$claudeDir/$_settingsFileName'),
+      backup: File('${backupDir.path}/$_settingsFileName'),
+      backupDir: backupDir,
+    );
+
+    final credentialsBackup = File('${backupDir.path}/$_credentialsFileName');
+    if (await credentialsBackup.exists()) {
+      return;
+    }
+    if (Platform.isMacOS) {
+      final existing = await _readFromKeychain();
+      if (existing != null) {
+        await backupDir.create(recursive: true);
+        await credentialsBackup.writeAsString(existing);
+      }
+    } else {
+      await _backupFileOnce(
+        live: File('$claudeDir/$_credentialsFileName'),
+        backup: credentialsBackup,
+        backupDir: backupDir,
+      );
+    }
+  }
+
+  Future<void> _backupFileOnce({
+    required File live,
+    required File backup,
+    required Directory backupDir,
+  }) async {
+    if (await live.exists() && !await backup.exists()) {
+      await backupDir.create(recursive: true);
+      await live.copy(backup.path);
+    }
+  }
+
+  /// Writes the MirrorStages `settings.json`: routes Claude Code traffic through
+  /// the shared proxy and pins the theme/model.
+  Future<void> _writeSettings(String claudeDir, String proxyUrl) async {
+    final settings = <String, dynamic>{
+      'env': <String, dynamic>{
+        'HTTPS_PROXY': proxyUrl,
+        'HTTP_PROXY': proxyUrl,
+      },
+      'theme': 'light',
+      'model': 'opus[1m]',
+    };
+    const encoder = JsonEncoder.withIndent('  ');
+    await File(
+      '$claudeDir/$_settingsFileName',
+    ).writeAsString('${encoder.convert(settings)}\n');
+  }
+
+  /// Whether a `~/.claude/old_config` backup exists that can be restored.
+  Future<bool> hasRestorableBackup() async {
+    final backupDir = Directory(
+      '${await directoryPath()}/$_backupDirectoryName',
+    );
+    if (!await backupDir.exists()) {
+      return false;
+    }
+    return await File('${backupDir.path}/$_settingsFileName').exists() ||
+        await File('${backupDir.path}/$_credentialsFileName').exists();
+  }
+
+  /// Restores the user's original Claude Code configuration from
+  /// `~/.claude/old_config`: `settings.json` and the credentials (Keychain on
+  /// macOS, `.credentials.json` elsewhere). A missing backup file means the
+  /// original did not exist, so the MirrorStages-written live copy is removed
+  /// to return to a pristine state. Throws [ClaudeConfigRestoreException] when
+  /// there is nothing to restore. Finally clears the backup directory.
+  Future<void> restoreOriginals() async {
+    final claudeDir = await directoryPath();
+    final backupDir = Directory('$claudeDir/$_backupDirectoryName');
+    if (!await hasRestorableBackup()) {
+      throw const ClaudeConfigRestoreException('未找到可恢复的原始 Claude 配置。');
+    }
+
+    await _restoreFile(
+      backup: File('${backupDir.path}/$_settingsFileName'),
+      live: File('$claudeDir/$_settingsFileName'),
+    );
+
+    final credentialsBackup = File('${backupDir.path}/$_credentialsFileName');
+    if (Platform.isMacOS) {
+      if (await credentialsBackup.exists()) {
+        await _writeToKeychain(await credentialsBackup.readAsString());
+      } else {
+        await _deleteFromKeychain();
+      }
+    } else {
+      await _restoreFile(
+        backup: credentialsBackup,
+        live: File('$claudeDir/$_credentialsFileName'),
+      );
+    }
+
+    if (await backupDir.exists()) {
+      await backupDir.delete(recursive: true);
+    }
+  }
+
+  /// Copies [backup] back over [live] when the backup exists; otherwise removes
+  /// [live] (it was MirrorStages-created, so "pristine" means absent).
+  Future<void> _restoreFile({required File backup, required File live}) async {
+    if (await backup.exists()) {
+      await backup.copy(live.path);
+    } else if (await live.exists()) {
+      await live.delete();
     }
   }
 
@@ -72,6 +218,12 @@ class ClaudeConfigManager implements ToolConfigManager {
   }
 
   Future<void> _writeToKeychain(String credentials) async {
+    // Delete any existing item first, then re-add with `-A`. `-U` updates the
+    // stored value in place but does NOT reset a pre-existing (restrictive)
+    // access-control list — that stale ACL is what triggers access prompts.
+    // Recreating the item guarantees the most permissive ACL on every write:
+    // any application may read it without a warning prompt.
+    await _deleteFromKeychain();
     final result = await Process.run('/usr/bin/security', [
       'add-generic-password',
       '-a',
@@ -80,14 +232,23 @@ class ClaudeConfigManager implements ToolConfigManager {
       _keychainService,
       '-w',
       credentials,
-      // Update the item in place if it already exists, and allow the Claude
-      // Code CLI to read it back without a per-access prompt.
-      '-U',
+      // Allow any application to read this item without warning (most
+      // permissive access; no per-access prompt).
       '-A',
     ]);
     if (result.exitCode != 0) {
       throw ClaudeConfigException(_processFailureDetails(result));
     }
+  }
+
+  /// Removes the Claude Code Keychain item if present. A missing item is not an
+  /// error — the desired end state is simply that no item exists.
+  Future<void> _deleteFromKeychain() async {
+    await Process.run('/usr/bin/security', [
+      'delete-generic-password',
+      '-s',
+      _keychainService,
+    ]);
   }
 
   Future<String?> _readFromKeychain() async {
@@ -194,4 +355,13 @@ class ClaudeConfigException implements Exception {
     }
     return '无法写入 Claude Code 凭据。$details';
   }
+}
+
+class ClaudeConfigRestoreException implements Exception {
+  const ClaudeConfigRestoreException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }

@@ -66,6 +66,7 @@ class _FakeAppService implements AppService {
         isCodexInstalled: true,
         isClaudeInstalled: true,
         canRestoreCodexConfig: false,
+        canRestoreClaudeConfig: false,
         rootCertificate: RootCertificateStatus(
           assetPath: 'assets/ca/mirrorstages-root-ca.cer',
           isInstalled: true,
@@ -142,6 +143,11 @@ class _FakeAppService implements AppService {
 
   @override
   Future<void> restoreOriginalConfig() {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> restoreClaudeConfig() {
     throw UnimplementedError();
   }
 }

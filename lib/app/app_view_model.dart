@@ -86,6 +86,13 @@ class AppViewModel extends ChangeNotifier {
     });
   }
 
+  Future<void> restoreClaudeConfig() async {
+    await _run(() async {
+      await _service.restoreClaudeConfig();
+      return _service.loadSnapshot();
+    });
+  }
+
   Future<void> installRootCertificate() async {
     await _run(() async {
       await _service.installRootCertificate();
