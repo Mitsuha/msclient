@@ -142,6 +142,19 @@ class _FakeAppService implements AppService {
   }
 
   @override
+  Future<void> selectProxy(String url) async {}
+
+  @override
+  Future<void> applyCodexInitStep(String stepId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> applyClaudeInitStep(String stepId) {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<void> restoreOriginalConfig() {
     throw UnimplementedError();
   }

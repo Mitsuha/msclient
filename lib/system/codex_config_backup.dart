@@ -37,12 +37,18 @@ class CodexConfigBackup {
   /// destroying the pristine original.
   Future<void> preserveOriginals() async {
     for (final name in managedFileNames) {
-      final live = _liveFile(name);
-      final backup = _backupFile(name);
-      if (await live.exists() && !await backup.exists()) {
-        await backupDirectory.create(recursive: true);
-        await live.rename(backup.path);
-      }
+      await preserveOriginal(name);
+    }
+  }
+
+  /// Moves a single original config file into [backupDirectory], once, so an
+  /// individual init step can be applied without touching the other files.
+  Future<void> preserveOriginal(String name) async {
+    final live = _liveFile(name);
+    final backup = _backupFile(name);
+    if (await live.exists() && !await backup.exists()) {
+      await backupDirectory.create(recursive: true);
+      await live.rename(backup.path);
     }
   }
 

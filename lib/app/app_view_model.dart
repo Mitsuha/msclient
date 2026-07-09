@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:desktop/app/app_exceptions.dart';
 import 'package:desktop/app/app_service.dart';
 import 'package:desktop/app/models/app_snapshot.dart';
@@ -12,6 +14,9 @@ class AppViewModel extends ChangeNotifier {
 
   final AppService _service;
 
+  /// How often the snapshot is silently refreshed while signed in.
+  static const _autoRefreshInterval = Duration(seconds: 30);
+
   AppSnapshot? _snapshot;
   NavSection _selectedSection = NavSection.dashboard;
   bool _isWorking = false;
@@ -20,6 +25,12 @@ class AppViewModel extends ChangeNotifier {
   bool _isLoggingIn = false;
   String? _errorMessage;
   String? _loginErrorMessage;
+
+  /// Periodic background refresh; only runs while authenticated.
+  Timer? _autoRefreshTimer;
+
+  /// True while a silent auto-refresh is in flight, so ticks never overlap.
+  bool _isAutoRefreshing = false;
 
   AppSnapshot? get snapshot => _snapshot;
   NavSection get selectedSection => _selectedSection;
@@ -38,6 +49,7 @@ class AppViewModel extends ChangeNotifier {
 
     if (_isAuthenticated) {
       await load();
+      _startAutoRefresh();
     }
   }
 
@@ -75,6 +87,41 @@ class AppViewModel extends ChangeNotifier {
   Future<bool> applyClaudeBilling(int userPackId) {
     return _run(() async {
       await _service.initializeClaude(userPackId: userPackId);
+      return _service.loadSnapshot();
+    });
+  }
+
+  /// Persists the chosen proxy node url and writes it straight into the
+  /// configs of the tools that are already initialized.
+  Future<void> selectProxy(String url) async {
+    await _run(() async {
+      await _service.selectProxy(url);
+      return _service.loadSnapshot();
+    });
+  }
+
+  /// Re-applies a single Codex initialization step from the settings page.
+  Future<void> applyCodexInitStep(String stepId) async {
+    await _run(() async {
+      await _service.applyCodexInitStep(stepId);
+      return _service.loadSnapshot();
+    });
+  }
+
+  /// Re-applies a single Claude Code initialization step from the settings
+  /// page.
+  Future<void> applyClaudeInitStep(String stepId) async {
+    await _run(() async {
+      await _service.applyClaudeInitStep(stepId);
+      return _service.loadSnapshot();
+    });
+  }
+
+  /// Clears the MirrorStages proxy configuration from the local tool configs
+  /// (Claude Code `settings.json` proxy entries, Codex `.env`).
+  Future<void> clearProxyConfig() async {
+    await _run(() async {
+      await _service.clearProxyConfig();
       return _service.loadSnapshot();
     });
   }
@@ -119,6 +166,7 @@ class AppViewModel extends ChangeNotifier {
       _isAuthenticated = true;
       _snapshot = null;
       await load();
+      _startAutoRefresh();
     } on ApiException catch (error) {
       _loginErrorMessage = _loginMessageFor(error);
     } catch (error) {
@@ -130,6 +178,7 @@ class AppViewModel extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    _stopAutoRefresh();
     await _service.logout();
     _snapshot = null;
     _isAuthenticated = false;
@@ -154,6 +203,7 @@ class AppViewModel extends ChangeNotifier {
       _snapshot = await action();
       succeeded = true;
     } on UnauthenticatedException {
+      _stopAutoRefresh();
       _isAuthenticated = false;
       _snapshot = null;
     } catch (error) {
@@ -163,6 +213,49 @@ class AppViewModel extends ChangeNotifier {
       notifyListeners();
     }
     return succeeded;
+  }
+
+  void _startAutoRefresh() {
+    _autoRefreshTimer?.cancel();
+    _autoRefreshTimer = Timer.periodic(
+      _autoRefreshInterval,
+      (_) => _autoRefresh(),
+    );
+  }
+
+  void _stopAutoRefresh() {
+    _autoRefreshTimer?.cancel();
+    _autoRefreshTimer = null;
+  }
+
+  /// Reloads the snapshot in the background without raising the working flag,
+  /// so the periodic refresh never flashes spinners or disables controls. Ticks
+  /// are skipped while a foreground action or a previous tick is still running.
+  Future<void> _autoRefresh() async {
+    if (!_isAuthenticated || _isWorking || _isAutoRefreshing) {
+      return;
+    }
+    _isAutoRefreshing = true;
+    try {
+      _snapshot = await _service.loadSnapshot();
+      _errorMessage = null;
+      notifyListeners();
+    } on UnauthenticatedException {
+      _stopAutoRefresh();
+      _isAuthenticated = false;
+      _snapshot = null;
+      notifyListeners();
+    } catch (_) {
+      // Transient failure: keep the last good snapshot and try again next tick.
+    } finally {
+      _isAutoRefreshing = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _stopAutoRefresh();
+    super.dispose();
   }
 
   String _loginMessageFor(ApiException error) {

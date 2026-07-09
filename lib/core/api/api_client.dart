@@ -21,6 +21,38 @@ class ApiClient {
     return _decode(response);
   }
 
+  /// Like [getJson] but for endpoints whose body is a top-level JSON array.
+  Future<List<dynamic>> getJsonList(
+    String path, {
+    String? token,
+    Map<String, String>? query,
+  }) async {
+    final response = await _httpClient.get(
+      _uri(path, query),
+      headers: _headers(token: token),
+    );
+    final body = response.body.isEmpty
+        ? <dynamic>[]
+        : jsonDecode(utf8.decode(response.bodyBytes));
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (body is List) {
+        return body;
+      }
+      throw ApiException(
+        statusCode: response.statusCode,
+        message: 'Invalid response',
+      );
+    }
+
+    final json = body is Map<String, dynamic> ? body : const <String, dynamic>{};
+    throw ApiException(
+      statusCode: response.statusCode,
+      error: json['error']?.toString(),
+      message: json['message']?.toString() ?? response.reasonPhrase,
+    );
+  }
+
   Future<Map<String, dynamic>> postJson(
     String path, {
     Object? body,

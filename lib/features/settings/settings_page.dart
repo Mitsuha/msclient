@@ -1,3 +1,4 @@
+import 'package:desktop/app/initialization/tool_initializer.dart';
 import 'package:desktop/app/models/app_snapshot.dart';
 import 'package:desktop/features/settings/error_banner.dart';
 import 'package:desktop/features/settings/settings_rows.dart';
@@ -13,8 +14,12 @@ class SettingsPage extends StatelessWidget {
     required this.errorMessage,
     required this.onRefresh,
     required this.onInstallRootCertificate,
+    required this.onSelectProxy,
+    required this.onApplyCodexInitStep,
+    required this.onApplyClaudeInitStep,
     required this.onRestoreCodexConfig,
     required this.onRestoreClaudeConfig,
+    required this.onClearConfig,
     required this.onOpenAdminConsole,
     required this.onLogout,
   });
@@ -24,8 +29,12 @@ class SettingsPage extends StatelessWidget {
   final String? errorMessage;
   final VoidCallback onRefresh;
   final VoidCallback onInstallRootCertificate;
+  final ValueChanged<String> onSelectProxy;
+  final ValueChanged<String> onApplyCodexInitStep;
+  final ValueChanged<String> onApplyClaudeInitStep;
   final VoidCallback onRestoreCodexConfig;
   final VoidCallback onRestoreClaudeConfig;
+  final VoidCallback onClearConfig;
   final VoidCallback onOpenAdminConsole;
   final VoidCallback onLogout;
 
@@ -52,10 +61,20 @@ class SettingsPage extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           SectionCard(
+            title: '代理节点',
+            child: _ProxySettings(
+              snapshot: snapshot,
+              isWorking: isWorking,
+              onSelectProxy: onSelectProxy,
+            ),
+          ),
+          const SizedBox(height: 18),
+          SectionCard(
             title: 'Codex 配置',
             child: _CodexSettings(
               snapshot: snapshot,
               isWorking: isWorking,
+              onApplyInitStep: onApplyCodexInitStep,
               onRestoreCodexConfig: onRestoreCodexConfig,
             ),
           ),
@@ -65,7 +84,16 @@ class SettingsPage extends StatelessWidget {
             child: _ClaudeSettings(
               snapshot: snapshot,
               isWorking: isWorking,
+              onApplyInitStep: onApplyClaudeInitStep,
               onRestoreClaudeConfig: onRestoreClaudeConfig,
+            ),
+          ),
+          const SizedBox(height: 18),
+          SectionCard(
+            title: '清除配置',
+            child: _ClearConfigSettings(
+              isWorking: isWorking,
+              onClearConfig: onClearConfig,
             ),
           ),
           const SizedBox(height: 18),
@@ -117,15 +145,153 @@ class _SettingsToolbar extends StatelessWidget {
   }
 }
 
+class _ProxySettings extends StatelessWidget {
+  const _ProxySettings({
+    required this.snapshot,
+    required this.isWorking,
+    required this.onSelectProxy,
+  });
+
+  final AppSnapshot snapshot;
+  final bool isWorking;
+  final ValueChanged<String> onSelectProxy;
+
+  @override
+  Widget build(BuildContext context) {
+    final options = snapshot.proxyOptions;
+    if (options.isEmpty) {
+      return const StatusRow(
+        label: '代理节点',
+        description: '暂无可用节点，初始化时将使用默认代理地址。',
+        enabled: false,
+        enabledText: '',
+        disabledText: '默认',
+      );
+    }
+
+    // The saved url may have vanished from the server list; a null group value
+    // simply leaves every segment unselected.
+    final selectedUrl =
+        options.any((option) => option.url == snapshot.selectedProxyUrl)
+        ? snapshot.selectedProxyUrl
+        : null;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '服务节点',
+                  style: TextStyle(
+                    color: Color(0xFF1D1D1F),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  '在连接慢时可尝试切换节点，需重启 Codex / Claude 生效',
+                  style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          AbsorbPointer(
+            absorbing: isWorking,
+            child: Opacity(
+              opacity: isWorking ? 0.5 : 1,
+              child: CupertinoSlidingSegmentedControl<String>(
+                groupValue: selectedUrl,
+                children: {
+                  for (final option in options)
+                    option.url: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      child: Text(
+                        option.name.isEmpty ? option.url : option.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF1D1D1F),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                },
+                onValueChanged: (url) {
+                  if (url != null && url != snapshot.selectedProxyUrl) {
+                    onSelectProxy(url);
+                  }
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The per-step check rows of a tool's initialization, each with a repair
+/// button when the step's on-disk state does not pass.
+class _InitStepRows extends StatelessWidget {
+  const _InitStepRows({
+    required this.steps,
+    required this.isWorking,
+    required this.onApplyStep,
+  });
+
+  final List<InitStepStatus> steps;
+  final bool isWorking;
+  final ValueChanged<String> onApplyStep;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (final step in steps) ...[
+          const RowDivider(),
+          StatusRow(
+            label: step.title,
+            description: step.description,
+            enabled: step.passed,
+            enabledText: '已配置',
+            disabledText: '未配置',
+            trailing: step.passed
+                ? null
+                : AppButton(
+                    label: '修复',
+                    compact: true,
+                    color: const Color(0xFFFF9500),
+                    disabledColor: const Color(0xFFFFD59A),
+                    onPressed: isWorking ? null : () => onApplyStep(step.id),
+                  ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class _CodexSettings extends StatelessWidget {
   const _CodexSettings({
     required this.snapshot,
     required this.isWorking,
+    required this.onApplyInitStep,
     required this.onRestoreCodexConfig,
   });
 
   final AppSnapshot snapshot;
   final bool isWorking;
+  final ValueChanged<String> onApplyInitStep;
   final VoidCallback onRestoreCodexConfig;
 
   @override
@@ -152,6 +318,11 @@ class _CodexSettings extends StatelessWidget {
             enabled: snapshot.codex.isInitialized,
             enabledText: '已初始化',
             disabledText: '未初始化',
+          ),
+          _InitStepRows(
+            steps: snapshot.codexInitSteps,
+            isWorking: isWorking,
+            onApplyStep: onApplyInitStep,
           ),
         ],
         const RowDivider(),
@@ -182,11 +353,13 @@ class _ClaudeSettings extends StatelessWidget {
   const _ClaudeSettings({
     required this.snapshot,
     required this.isWorking,
+    required this.onApplyInitStep,
     required this.onRestoreClaudeConfig,
   });
 
   final AppSnapshot snapshot;
   final bool isWorking;
+  final ValueChanged<String> onApplyInitStep;
   final VoidCallback onRestoreClaudeConfig;
 
   @override
@@ -213,6 +386,12 @@ class _ClaudeSettings extends StatelessWidget {
           enabledText: '已初始化',
           disabledText: '未初始化',
         ),
+        if (configuration.isClaudeInstalled)
+          _InitStepRows(
+            steps: snapshot.claudeInitSteps,
+            isWorking: isWorking,
+            onApplyStep: onApplyInitStep,
+          ),
         const RowDivider(),
         StatusRow(
           label: '恢复原始配置',
@@ -242,12 +421,30 @@ class _ClaudeSettings extends StatelessWidget {
 Future<void> _confirmRestore(
   BuildContext context,
   VoidCallback onConfirmed,
-) async {
+) {
+  return _confirmDestructive(
+    context,
+    title: '恢复原始配置',
+    content: '将恢复到初始化之前的配置，恢复后需要重新初始化才能运行',
+    confirmLabel: '恢复',
+    onConfirmed: onConfirmed,
+  );
+}
+
+/// Shows a Cupertino confirm dialog for a destructive action, invoking
+/// [onConfirmed] only when the user taps the (destructive) confirm button.
+Future<void> _confirmDestructive(
+  BuildContext context, {
+  required String title,
+  required String content,
+  required String confirmLabel,
+  required VoidCallback onConfirmed,
+}) async {
   final confirmed = await showCupertinoDialog<bool>(
     context: context,
     builder: (dialogContext) => CupertinoAlertDialog(
-      title: const Text('恢复原始配置'),
-      content: const Text('将恢复到初始化之前的配置，恢复后需要重新初始化才能运行'),
+      title: Text(title),
+      content: Text(content),
       actions: [
         CupertinoDialogAction(
           onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -256,13 +453,51 @@ Future<void> _confirmRestore(
         CupertinoDialogAction(
           isDestructiveAction: true,
           onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: const Text('恢复'),
+          child: Text(confirmLabel),
         ),
       ],
     ),
   );
   if (confirmed == true) {
     onConfirmed();
+  }
+}
+
+/// The "清除配置" section: removes the MirrorStages proxy configuration from the
+/// local tool configs (Claude Code `settings.json`, Codex `.env`).
+class _ClearConfigSettings extends StatelessWidget {
+  const _ClearConfigSettings({
+    required this.isWorking,
+    required this.onClearConfig,
+  });
+
+  final bool isWorking;
+  final VoidCallback onClearConfig;
+
+  @override
+  Widget build(BuildContext context) {
+    return StatusRow(
+      label: '清除代理配置',
+      description: '移除 Claude settings.json 的代理项并删除 Codex .env，其它配置保持不变。',
+      enabled: true,
+      enabledText: '',
+      disabledText: '',
+      trailing: AppButton(
+        label: '清除',
+        compact: true,
+        color: const Color(0xFFFF3B30),
+        disabledColor: const Color(0xFFFFC3BF),
+        onPressed: isWorking
+            ? null
+            : () => _confirmDestructive(
+                context,
+                title: '清除代理配置',
+                content: '将移除 Claude settings.json 的代理项并删除 Codex .env，需要重新初始化才能运行',
+                confirmLabel: '清除',
+                onConfirmed: onClearConfig,
+              ),
+      ),
+    );
   }
 }
 

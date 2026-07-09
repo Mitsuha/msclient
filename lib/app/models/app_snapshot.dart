@@ -1,6 +1,8 @@
+import 'package:desktop/app/initialization/tool_initializer.dart';
 import 'package:desktop/app/models/account_summary.dart';
 import 'package:desktop/app/models/local_status.dart';
 import 'package:desktop/app/models/tool_status.dart';
+import 'package:desktop/data/models/client_proxy_models.dart';
 import 'package:desktop/system/process_inspector.dart';
 
 /// Health of the global runtime environment MirrorStages depends on: no
@@ -25,6 +27,10 @@ class AppSnapshot {
     required this.localConfiguration,
     this.dashboard,
     this.conflicts = const [],
+    this.proxyOptions = const [],
+    this.selectedProxyUrl,
+    this.codexInitSteps = const [],
+    this.claudeInitSteps = const [],
     this.message,
   });
 
@@ -35,6 +41,17 @@ class AppSnapshot {
   final LocalConfigurationStatus localConfiguration;
   final DashboardData? dashboard;
   final List<ConflictProcess> conflicts;
+
+  /// Proxy nodes fetched from the server (already sorted; first is the
+  /// default) and the url currently in effect for initialization.
+  final List<ClientProxyOption> proxyOptions;
+  final String? selectedProxyUrl;
+
+  /// Per-step check results of each tool's initialization, in step order, so
+  /// the settings page can verify and repair steps individually.
+  final List<InitStepStatus> codexInitSteps;
+  final List<InitStepStatus> claudeInitSteps;
+
   final String? message;
 
   bool get isBusy => environment == EnvironmentStatus.loading;

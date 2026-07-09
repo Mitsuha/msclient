@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=MirrorStages Desktop
+Comment=MirrorStages 桌面控制面板
+Exec=mirrorstages-desktop
+Icon=mirrorstages-desktop
+Terminal=false
+Categories=Utility;Network;
+StartupWMClass=desktop

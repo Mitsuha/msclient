@@ -10,11 +10,17 @@ import 'package:flutter/foundation.dart';
 /// credentials under.
 const String _keychainService = 'Claude Code-credentials';
 
-/// Reads and writes the local Claude Code credentials.
+/// Reads and writes the local Claude Code configuration.
 ///
-/// On macOS these live in the login Keychain (item `Claude Code-credentials`);
-/// on Windows/Linux they live in `~/.claude/.credentials.json`. The stored
-/// value is the raw login info returned by `POST /user/claude-auth`.
+/// Applying MirrorStages auth touches two places:
+///
+/// * the **credentials store** — on macOS the login Keychain (item
+///   `Claude Code-credentials`), on Windows/Linux `~/.claude/.credentials.json`
+///   — which holds the `claudeAiOauth` block extracted from
+///   `POST /user/claude-auth`;
+/// * `~/.claude.json` — Claude Code's global profile (a sibling of the
+///   `~/.claude` directory) — into which the account identity from the same
+///   response is merged.
 class ClaudeConfigManager implements ToolConfigManager {
   ClaudeConfigManager({required this._home});
 
@@ -30,56 +36,197 @@ class ClaudeConfigManager implements ToolConfigManager {
   Future<String> _credentialsFilePath() async =>
       '${await directoryPath()}/.credentials.json';
 
+  /// Path of Claude Code's global profile, `~/.claude.json` — note this is a
+  /// sibling of the `~/.claude` directory, not a file inside it.
+  Future<String> _profileFilePath() async =>
+      '${await _home.resolve()}/.claude.json';
+
   /// Sub-directory of `~/.claude` that holds the backed-up original config.
   static const _backupDirectoryName = 'old_config';
   static const _settingsFileName = 'settings.json';
   static const _credentialsFileName = '.credentials.json';
 
-  /// Stores [claudeAuth] as the local Claude Code credentials, then routes
-  /// Claude Code through the shared [proxyUrl] by rewriting `settings.json`.
+  /// Whether the stored credentials decode into a MirrorStages account —
+  /// the check side of the credentials init step.
+  Future<bool> hasMirrorStagesCredentials() async =>
+      (await readStatus()).isInitialized;
+
+  /// Applies the MirrorStages auth returned by `POST /user/claude-auth`.
   ///
-  /// The user's original `settings.json` and credentials (the macOS Keychain
-  /// item, or `.credentials.json` on Windows/Linux) are preserved into
-  /// `~/.claude/old_config` first, so the change can be rolled back.
-  Future<void> initialize({
-    required Map<String, dynamic> claudeAuth,
-    required String proxyUrl,
-  }) async {
+  /// Two things are written from the single [claudeAuth] response:
+  ///
+  /// 1. its `claudeAiOauth` block becomes the local credentials
+  ///    ([writeCredentials]);
+  /// 2. its account identity (`oauthAccount` / `userID` / `machineID`) is
+  ///    merged into `~/.claude.json`, which is also marked as onboarded
+  ///    ([_writeProfile]).
+  ///
+  /// Does not back up the user's originals — the backup is taken once, up
+  /// front, by [preserveOriginals] during a full first-time initialization.
+  Future<void> writeAuth(Map<String, dynamic> claudeAuth) async {
+    await writeCredentials({'claudeAiOauth': claudeAuth['claudeAiOauth']});
+    await _writeProfile(claudeAuth);
+  }
+
+  /// Stores [credentials] verbatim as the local Claude Code credentials (the
+  /// macOS Keychain item, or `.credentials.json` on Windows/Linux). Callers
+  /// pass the `{claudeAiOauth: ...}` block, not the whole auth response.
+  ///
+  /// Does not back up the user's original — see [writeAuth].
+  Future<void> writeCredentials(Map<String, dynamic> credentials) async {
     final claudeDir = await directoryPath();
     await Directory(claudeDir).create(recursive: true);
 
-    // Preserve the pristine originals before we overwrite anything. For
-    // .credentials.json this must happen before the credential write below,
-    // otherwise the backup would capture the MirrorStages file.
-    await _preserveOriginals(claudeDir);
-
-    final credentials = jsonEncode(claudeAuth);
+    final encoded = jsonEncode(credentials);
     if (Platform.isMacOS) {
-      await _writeToKeychain(credentials);
+      await _writeToKeychain(encoded);
     } else {
-      await _writeToFile(credentials);
+      await _writeToFile(encoded);
     }
-
-    await _writeSettings(claudeDir, proxyUrl);
   }
 
-  /// Copies the user's original config into `~/.claude/old_config` once, before
-  /// MirrorStages overwrites it, so the change can be rolled back.
+  /// Merges the account identity from a `POST /user/claude-auth` response into
+  /// `~/.claude.json`, preserving every other field Claude Code keeps there
+  /// (project history, MCP servers, …), and marks onboarding complete.
   ///
-  /// `settings.json` is always a file. Credentials are a file on Windows/Linux
-  /// but live in the macOS Keychain — there we read the current Keychain item
-  /// and snapshot it into `old_config/.credentials.json` so restore can write
-  /// it back. A file is backed up at most once, so repeated initializations
-  /// never clobber the pristine original with a MirrorStages-generated file.
-  Future<void> _preserveOriginals(String claudeDir) async {
-    final backupDir = Directory('$claudeDir/$_backupDirectoryName');
+  /// Only the identity fields the server actually returned are copied, so a
+  /// field the response omits never clobbers an existing value with null.
+  Future<void> _writeProfile(Map<String, dynamic> claudeAuth) async {
+    final file = File(await _profileFilePath());
+    final profile = await _readJsonObject(file);
+    for (final key in const ['oauthAccount', 'userID', 'machineID']) {
+      if (claudeAuth.containsKey(key)) {
+        profile[key] = claudeAuth[key];
+      }
+    }
+    profile['hasCompletedOnboarding'] = true;
 
+    const encoder = JsonEncoder.withIndent('  ');
+    await file.writeAsString('${encoder.convert(profile)}\n');
+  }
+
+  /// Whether `settings.json` routes Claude Code through a proxy: its `env`
+  /// carries non-empty `HTTPS_PROXY` and `HTTP_PROXY` entries.
+  Future<bool> hasProxySettings() async {
+    try {
+      final file = File('${await directoryPath()}/$_settingsFileName');
+      if (!await file.exists()) {
+        return false;
+      }
+      final settings = jsonDecode(await file.readAsString());
+      if (settings is! Map) {
+        return false;
+      }
+      final env = settings['env'];
+      if (env is! Map) {
+        return false;
+      }
+      bool has(String key) {
+        final value = env[key];
+        return value is String && value.isNotEmpty;
+      }
+
+      return has('HTTPS_PROXY') && has('HTTP_PROXY');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Points the `env` proxies in `settings.json` at [proxyUrl], preserving any
+  /// other settings the user keeps in the file; the theme/model defaults are
+  /// only pinned when absent.
+  ///
+  /// Does not back up the user's original — the backup is taken once, up front,
+  /// by [preserveOriginals] during a full first-time initialization.
+  Future<void> writeProxySettings(String proxyUrl) async {
+    final claudeDir = await directoryPath();
+    await Directory(claudeDir).create(recursive: true);
+
+    final live = File('$claudeDir/$_settingsFileName');
+    final settings = await _readSettings(live);
+    final env = settings['env'] is Map
+        ? Map<String, dynamic>.from(settings['env'] as Map)
+        : <String, dynamic>{};
+    env['HTTPS_PROXY'] = proxyUrl;
+    env['HTTP_PROXY'] = proxyUrl;
+    settings['env'] = env;
+    settings.putIfAbsent('theme', () => 'light');
+    settings.putIfAbsent('model', () => 'opus[1m]');
+
+    const encoder = JsonEncoder.withIndent('  ');
+    await live.writeAsString('${encoder.convert(settings)}\n');
+  }
+
+  /// Removes the `HTTPS_PROXY` / `HTTP_PROXY` entries from `settings.json`'s
+  /// `env`, leaving every other setting — and every other env var — untouched.
+  /// A missing file, or one without an `env` proxy, is a no-op.
+  Future<void> clearProxySettings() async {
+    final file = File('${await directoryPath()}/$_settingsFileName');
+    if (!await file.exists()) {
+      return;
+    }
+    final settings = await _readSettings(file);
+    if (settings['env'] is! Map) {
+      return;
+    }
+    final env = Map<String, dynamic>.from(settings['env'] as Map)
+      ..remove('HTTPS_PROXY')
+      ..remove('HTTP_PROXY');
+    settings['env'] = env;
+
+    const encoder = JsonEncoder.withIndent('  ');
+    await file.writeAsString('${encoder.convert(settings)}\n');
+  }
+
+  /// The current `settings.json` as a mutable map; a missing or malformed file
+  /// yields an empty map so the write can start from the defaults.
+  Future<Map<String, dynamic>> _readSettings(File file) => _readJsonObject(file);
+
+  /// Parses [file] as a JSON object, returning a mutable map. A missing or
+  /// malformed file yields an empty map so a merging write can start clean.
+  Future<Map<String, dynamic>> _readJsonObject(File file) async {
+    try {
+      if (!await file.exists()) {
+        return <String, dynamic>{};
+      }
+      final parsed = jsonDecode(await file.readAsString());
+      return parsed is Map<String, dynamic> ? parsed : <String, dynamic>{};
+    } catch (_) {
+      return <String, dynamic>{};
+    }
+  }
+
+  /// Snapshots the user's original `settings.json` and credentials into
+  /// `~/.claude/old_config` (each at most once) before MirrorStages overwrites
+  /// them. Called only for a full first-time initialization, so no other entry
+  /// point creates the backup.
+  ///
+  /// Credentials are snapshotted before the credentials step runs, so the
+  /// backup captures the user's file rather than the MirrorStages one.
+  Future<void> preserveOriginals() async {
+    final claudeDir = await directoryPath();
+    await Directory(claudeDir).create(recursive: true);
+
+    final backupDir = Directory('$claudeDir/$_backupDirectoryName');
     await _backupFileOnce(
       live: File('$claudeDir/$_settingsFileName'),
       backup: File('${backupDir.path}/$_settingsFileName'),
       backupDir: backupDir,
     );
+    await _preserveCredentialsOriginal(claudeDir);
+  }
 
+  /// Snapshots the user's original credentials into `~/.claude/old_config`
+  /// once, before MirrorStages overwrites them, so the change can be rolled
+  /// back.
+  ///
+  /// Credentials are a file on Windows/Linux but live in the macOS Keychain —
+  /// there we read the current Keychain item and snapshot it into
+  /// `old_config/.credentials.json` so restore can write it back. The backup is
+  /// written at most once, so repeated initializations never clobber the
+  /// pristine original with a MirrorStages-generated one.
+  Future<void> _preserveCredentialsOriginal(String claudeDir) async {
+    final backupDir = Directory('$claudeDir/$_backupDirectoryName');
     final credentialsBackup = File('${backupDir.path}/$_credentialsFileName');
     if (await credentialsBackup.exists()) {
       return;
@@ -108,23 +255,6 @@ class ClaudeConfigManager implements ToolConfigManager {
       await backupDir.create(recursive: true);
       await live.copy(backup.path);
     }
-  }
-
-  /// Writes the MirrorStages `settings.json`: routes Claude Code traffic through
-  /// the shared proxy and pins the theme/model.
-  Future<void> _writeSettings(String claudeDir, String proxyUrl) async {
-    final settings = <String, dynamic>{
-      'env': <String, dynamic>{
-        'HTTPS_PROXY': proxyUrl,
-        'HTTP_PROXY': proxyUrl,
-      },
-      'theme': 'light',
-      'model': 'opus[1m]',
-    };
-    const encoder = JsonEncoder.withIndent('  ');
-    await File(
-      '$claudeDir/$_settingsFileName',
-    ).writeAsString('${encoder.convert(settings)}\n');
   }
 
   /// Whether a `~/.claude/old_config` backup exists that can be restored.
@@ -186,20 +316,27 @@ class ClaudeConfigManager implements ToolConfigManager {
     }
   }
 
-  /// Reads the stored credentials and reports the Claude Code initialization
-  /// state. Any failure — the item/file is missing, the JSON is malformed, or
-  /// the access token cannot be parsed — is treated as
-  /// [ToolStatus.uninitialized] rather than surfaced as an error.
+  /// Reports the Claude Code initialization state. Initialization is decided by
+  /// the credentials store — the account counts as MirrorStages only when its
+  /// access token carries a `user_pack_id` ([parseClaudeUserPackId]) — while the
+  /// account's display fields (email, name, plan) are read from the
+  /// `~/.claude.json` profile's `oauthAccount` ([claudeAccountFromProfile]).
+  ///
+  /// Any failure — the item/file is missing, the JSON is malformed, or the
+  /// access token cannot be parsed — is treated as [ToolStatus.uninitialized]
+  /// rather than surfaced as an error.
   @override
   Future<ToolStatus> readStatus() async {
     final credentials = await _readCredentials();
     if (credentials == null) {
       return const ToolStatus.uninitialized();
     }
-    final account = parseClaudeAccount(credentials);
-    return account == null
-        ? const ToolStatus.uninitialized()
-        : ToolStatus.initialized(account);
+    final userPackId = parseClaudeUserPackId(credentials);
+    if (userPackId == null) {
+      return const ToolStatus.uninitialized();
+    }
+    final profile = await _readJsonObject(File(await _profileFilePath()));
+    return ToolStatus.initialized(claudeAccountFromProfile(profile, userPackId));
   }
 
   Future<String?> _readCredentials() async {
@@ -290,14 +427,17 @@ class ClaudeConfigManager implements ToolConfigManager {
 
 const String _accessTokenPrefix = 'sk-ant-oat01-';
 
-/// Parses the account out of a Claude Code credentials JSON string, or returns
-/// null if the credentials cannot be interpreted as an initialized account.
+/// Reads the `user_pack_id` out of a Claude Code credentials JSON string, or
+/// returns null when the credentials are not a MirrorStages access token.
 ///
-/// The `claudeAiOauth.accessToken` is `sk-ant-oat01-<content>-<...>` where
-/// `<content>` is the URL-safe, unpadded base64 of
-/// `user_id|account_sharing_member_id|user_pack_id|account_email`.
+/// The `claudeAiOauth.accessToken` is `sk-ant-oat01-<content>-<signature>`
+/// where `<content>` is the URL-safe, unpadded base64 of
+/// `user_id|account_sharing_member_id|user_pack_id|` followed by 8 random
+/// padding bytes. Only the ASCII prefix up to the 3rd `|` is meaningful, so the
+/// pack id (the 3rd field, `"0"` for pay-as-you-go / 按量计费) is read from the
+/// raw bytes without UTF-8 decoding the random padding tail.
 @visibleForTesting
-ToolAccount? parseClaudeAccount(String credentialsJson) {
+int? parseClaudeUserPackId(String credentialsJson) {
   try {
     final root = jsonDecode(credentialsJson);
     if (root is! Map) {
@@ -316,23 +456,47 @@ ToolAccount? parseClaudeAccount(String credentialsJson) {
         .substring(_accessTokenPrefix.length)
         .split('-')
         .first;
-    final decoded = utf8.decode(base64Url.decode(base64Url.normalize(content)));
-    final fields = decoded.split('|');
-    if (fields.length != 4) {
+    final bytes = base64Url.decode(base64Url.normalize(content));
+    const pipe = 0x7c; // '|'
+    final pipes = <int>[];
+    for (var i = 0; i < bytes.length && pipes.length < 3; i++) {
+      if (bytes[i] == pipe) {
+        pipes.add(i);
+      }
+    }
+    if (pipes.length < 3) {
       return null;
     }
-
-    final email = fields[3];
-    return ToolAccount(
-      email: email,
-      name: email.split('@').first,
-      planType: _planTypeFor(oauth['rateLimitTier']?.toString()),
-      // fields[2] is user_pack_id ("0" for pay-as-you-go / 按量计费).
-      userPackId: int.tryParse(fields[2]) ?? 0,
-    );
+    // The pack id lives between the 2nd and 3rd '|'; those first three fields
+    // are ASCII digits, so decoding just that slice never hits the padding.
+    return int.tryParse(ascii.decode(bytes.sublist(pipes[1] + 1, pipes[2]))) ??
+        0;
   } catch (_) {
     return null;
   }
+}
+
+/// Builds the signed-in Claude account from the `~/.claude.json` profile: the
+/// email, display name, and plan come from its `oauthAccount`
+/// (`emailAddress` / `displayName` / `organizationRateLimitTier`), while the
+/// billing [userPackId] is carried over from the access token.
+@visibleForTesting
+ToolAccount claudeAccountFromProfile(
+  Map<String, dynamic> profile,
+  int userPackId,
+) {
+  final oauthAccount = profile['oauthAccount'];
+  final account = oauthAccount is Map ? oauthAccount : const <String, dynamic>{};
+  final email = account['emailAddress']?.toString() ?? '';
+  final displayName = account['displayName']?.toString() ?? '';
+  return ToolAccount(
+    email: email,
+    name: displayName.isNotEmpty
+        ? displayName
+        : (email.contains('@') ? email.split('@').first : email),
+    planType: _planTypeFor(account['organizationRateLimitTier']?.toString()),
+    userPackId: userPackId,
+  );
 }
 
 String _planTypeFor(String? rateLimitTier) {

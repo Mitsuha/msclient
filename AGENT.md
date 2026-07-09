@@ -21,6 +21,8 @@ lib/
 ├── main.dart      window bootstrap only
 ├── app/           composition + shared state: MirrorStagesApp, AppConfig,
 │   │              AppViewModel, AppService (facade), exceptions
+│   ├── initialization/  step-based tool init (InitStep, ToolInitializer,
+│   │              per-tool step factories) — see docs/initialization.md
 │   └── models/    UI-facing aggregates: AppSnapshot, AccountSummary,
 │                  LocalConfigurationStatus, NavSection
 ├── core/          generic, domain-free: ApiClient, utils (json/jwt/formatters)
