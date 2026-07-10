@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:desktop/system/claude_config_manager.dart';
+import 'package:desktop/system/home_directory.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Builds the URL-safe, unpadded base64 of [bytes] — the inverse of Go's
@@ -123,4 +125,87 @@ void main() {
       expect(account.planType, 'Pro');
     });
   });
+
+  group('writeProxySettings', () {
+    late Directory home;
+    late ClaudeConfigManager config;
+
+    setUp(() async {
+      home = await Directory.systemTemp.createTemp('claude-config-test');
+      config = ClaudeConfigManager(home: _FakeHome(home.path));
+    });
+
+    tearDown(() => home.delete(recursive: true));
+
+    File settingsFile() => File('${home.path}/.claude/settings.json');
+
+    Future<Map<String, dynamic>> readSettings() async =>
+        jsonDecode(await settingsFile().readAsString()) as Map<String, dynamic>;
+
+    test('resets env to exactly the proxy entries', () async {
+      await settingsFile().parent.create(recursive: true);
+      await settingsFile().writeAsString(
+        jsonEncode({
+          'env': {
+            'HTTPS_PROXY': 'https://old.example.com:5211',
+            'ANTHROPIC_BASE_URL': 'https://old.example.com',
+            'NO_PROXY': 'localhost',
+          },
+        }),
+      );
+
+      await config.writeProxySettings('http://127.0.0.1:18610');
+
+      final settings = await readSettings();
+      expect(settings['env'], {
+        'HTTPS_PROXY': 'http://127.0.0.1:18610',
+        'HTTP_PROXY': 'http://127.0.0.1:18610',
+      });
+    });
+
+    test('keeps every key outside env, pins defaults only when absent',
+        () async {
+      await settingsFile().parent.create(recursive: true);
+      await settingsFile().writeAsString(
+        jsonEncode({
+          'theme': 'dark',
+          'permissions': {
+            'allow': ['Bash'],
+          },
+          'env': {'FOO': 'bar'},
+        }),
+      );
+
+      await config.writeProxySettings('http://127.0.0.1:18610');
+
+      final settings = await readSettings();
+      expect(settings['theme'], 'dark', reason: 'existing value is not pinned');
+      expect(settings['permissions'], {
+        'allow': ['Bash'],
+      });
+      expect(settings['model'], 'opus[1m]', reason: 'absent default is pinned');
+      expect((settings['env'] as Map).containsKey('FOO'), isFalse);
+    });
+
+    test('creates the file from scratch when missing', () async {
+      await config.writeProxySettings('http://127.0.0.1:18610');
+
+      final settings = await readSettings();
+      expect(settings['env'], {
+        'HTTPS_PROXY': 'http://127.0.0.1:18610',
+        'HTTP_PROXY': 'http://127.0.0.1:18610',
+      });
+      expect(settings['theme'], 'light');
+      expect(settings['model'], 'opus[1m]');
+    });
+  });
+}
+
+class _FakeHome extends HomeDirectory {
+  _FakeHome(this._path);
+
+  final String _path;
+
+  @override
+  Future<String> resolve() async => _path;
 }

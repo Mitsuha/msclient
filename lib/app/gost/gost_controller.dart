@@ -45,6 +45,8 @@ class GostController {
     'openai.com',
     'claude.com',
     'claude.ai',
+    'api.anthropic.com',
+    'platform.claude.com',
   ];
 
   Future<void>? _starting;

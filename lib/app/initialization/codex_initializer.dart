@@ -23,22 +23,22 @@ ToolInitializer codexInitializer({
   return ToolInitializer([
     InitStep(
       id: CodexInitSteps.proxyEnv,
-      title: '代理环境变量',
-      description: '.env 中写入 http_proxy / https_proxy 代理地址。',
+      title: '代理配置',
+      description: '通过 Mirrorstages 来确保一致的网络环境。',
       check: config.hasProxyEnv,
       apply: () async => config.writeProxyEnv(await resolveProxyUrl()),
     ),
     InitStep(
       id: CodexInitSteps.auth,
       title: '授权凭据',
-      description: 'auth.json 中写入 MirrorStages 授权令牌。',
+      description: '写入 Codex 账号授权凭据。',
       check: config.hasMirrorStagesAuth,
       apply: () async => config.writeAuth(await fetchAuth()),
     ),
     InitStep(
       id: CodexInitSteps.providerConfig,
       title: 'Provider 配置',
-      description: 'config.toml 中不能存在自定义 provider。',
+      description: '删除之前配置的第三方 API，使用 Codex 账户直接访问',
       check: config.hasCleanProviderConfig,
       apply: config.clearProviderConfig,
     ),

@@ -131,9 +131,11 @@ class ClaudeConfigManager implements ToolConfigManager {
     }
   }
 
-  /// Points the `env` proxies in `settings.json` at [proxyUrl], preserving any
-  /// other settings the user keeps in the file; the theme/model defaults are
-  /// only pinned when absent.
+  /// Rewrites `settings.json`'s `env` to exactly the proxy entries pointing at
+  /// [proxyUrl] — any other env var the user had is dropped, so nothing stale
+  /// (an old proxy, an ANTHROPIC_* override, …) can shadow the MirrorStages
+  /// routing. Every key outside `env` is preserved as-is; the theme/model
+  /// defaults are only pinned when absent.
   ///
   /// Does not back up the user's original — the backup is taken once, up front,
   /// by [preserveOriginals] during a full first-time initialization.
@@ -143,12 +145,10 @@ class ClaudeConfigManager implements ToolConfigManager {
 
     final live = File('$claudeDir/$_settingsFileName');
     final settings = await _readSettings(live);
-    final env = settings['env'] is Map
-        ? Map<String, dynamic>.from(settings['env'] as Map)
-        : <String, dynamic>{};
-    env['HTTPS_PROXY'] = proxyUrl;
-    env['HTTP_PROXY'] = proxyUrl;
-    settings['env'] = env;
+    settings['env'] = <String, dynamic>{
+      'HTTPS_PROXY': proxyUrl,
+      'HTTP_PROXY': proxyUrl,
+    };
     settings.putIfAbsent('theme', () => 'light');
     settings.putIfAbsent('model', () => 'opus[1m]');
 

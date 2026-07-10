@@ -23,14 +23,15 @@ ToolInitializer claudeInitializer({
     InitStep(
       id: ClaudeInitSteps.credentials,
       title: '授权凭据',
-      description: '写入 MirrorStages 授权凭据（macOS 为钥匙串）并更新 ~/.claude.json 账户信息。',
+      description: '写入 Claude Code 授权凭据',
       check: config.hasMirrorStagesCredentials,
       apply: () async => config.writeAuth(await fetchAuth()),
     ),
     InitStep(
       id: ClaudeInitSteps.proxySettings,
       title: '代理设置',
-      description: 'settings.json 中写入 HTTPS_PROXY / HTTP_PROXY 代理地址。',
+      description:
+          '通过 Mirrorstages 来确保一致的网络环境。',
       check: config.hasProxySettings,
       apply: () async => config.writeProxySettings(await resolveProxyUrl()),
     ),
