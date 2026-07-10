@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:desktop/app/app_config.dart';
 import 'package:desktop/app/app_exceptions.dart';
+import 'package:desktop/app/gost/gost_controller.dart';
 import 'package:desktop/app/initialization/claude_initializer.dart';
 import 'package:desktop/app/initialization/codex_initializer.dart';
 import 'package:desktop/app/initialization/tool_initializer.dart';
@@ -8,10 +11,10 @@ import 'package:desktop/app/models/app_snapshot.dart';
 import 'package:desktop/app/models/local_status.dart';
 import 'package:desktop/core/api/api_client.dart';
 import 'package:desktop/data/api/auth_api.dart';
-import 'package:desktop/data/api/claude_auth_api.dart';
-import 'package:desktop/data/api/codex_auth_api.dart';
 import 'package:desktop/data/api/dashboard_api.dart';
 import 'package:desktop/data/api/desktop_config_api.dart';
+import 'package:desktop/data/api/gost_api.dart';
+import 'package:desktop/data/api/tool_auth_api.dart';
 import 'package:desktop/data/api/user_pack_api.dart';
 import 'package:desktop/data/models/account_models.dart';
 import 'package:desktop/data/models/client_proxy_models.dart';
@@ -20,6 +23,8 @@ import 'package:desktop/data/session/session_store.dart';
 import 'package:desktop/system/claude_config_manager.dart';
 import 'package:desktop/system/codex_config_manager.dart';
 import 'package:desktop/system/external_browser.dart';
+import 'package:desktop/system/gost_binary.dart';
+import 'package:desktop/system/gost_process.dart';
 import 'package:desktop/system/home_directory.dart';
 import 'package:desktop/system/process_inspector.dart';
 import 'package:desktop/system/root_certificate_manager.dart';
@@ -42,6 +47,7 @@ class AppService {
     required this._codexConfig,
     required this._claudeConfig,
     required this._browser,
+    required this._gost,
   });
 
   /// Wires the service against the production endpoints in [AppConfig].
@@ -51,8 +57,8 @@ class AppService {
     return AppService(
       sessionStore: const SessionStore(),
       authApi: AuthApi(client),
-      codexAuthApi: CodexAuthApi(client),
-      claudeAuthApi: ClaudeAuthApi(client),
+      codexAuthApi: ToolAuthApi.codex(client),
+      claudeAuthApi: ToolAuthApi.claude(client),
       dashboardApi: DashboardApi(client),
       userPackApi: UserPackApi(client),
       desktopConfigApi: DesktopConfigApi(client),
@@ -65,13 +71,19 @@ class AppService {
       codexConfig: CodexConfigManager(home: home),
       claudeConfig: ClaudeConfigManager(home: home),
       browser: const ExternalBrowser(),
+      gost: GostController(
+        binary: GostBinary(home: home),
+        process: GostProcess(),
+        api: GostApiClient(baseUri: AppConfig.gostApiBaseUri),
+        home: home,
+      ),
     );
   }
 
   final SessionStore _sessionStore;
   final AuthApi _authApi;
-  final CodexAuthApi _codexAuthApi;
-  final ClaudeAuthApi _claudeAuthApi;
+  final ToolAuthApi _codexAuthApi;
+  final ToolAuthApi _claudeAuthApi;
   final DashboardApi _dashboardApi;
   final UserPackApi _userPackApi;
   final DesktopConfigApi _desktopConfigApi;
@@ -81,6 +93,21 @@ class AppService {
   final CodexConfigManager _codexConfig;
   final ClaudeConfigManager _claudeConfig;
   final ExternalBrowser _browser;
+  final GostController _gost;
+
+  /// Launches go-gost and points its chain at the selected node. Best-effort:
+  /// never throws, so a failure (e.g. offline first run) can't block the app.
+  Future<void> startGost() async {
+    try {
+      await _gost.start();
+      await _gost.applyProxyNode(await _resolveRemoteProxyUrl());
+    } catch (error) {
+      debugPrint('startGost failed: $error');
+    }
+  }
+
+  /// Stops the local go-gost process. Call on app shutdown.
+  Future<void> stopGost() => _gost.stop();
 
   Future<bool> hasSession() async {
     return await _sessionStore.load() != null;
@@ -115,6 +142,20 @@ class AppService {
 
     final proxyOptions = await _loadProxyOptions();
     final selectedProxyUrl = await _selectedProxyUrlFor(proxyOptions);
+
+    // Keep gost's chain aligned with the selection; no-ops when unchanged.
+    // Best-effort: nobody awaits this, so a dead gost must not become an
+    // unhandled zone exception.
+    unawaited(
+      _gost
+          .applyProxyNode(selectedProxyUrl ?? AppConfig.proxyUrl)
+          .catchError(
+            (Object error) => debugPrint('applyProxyNode failed: $error'),
+          ),
+    );
+
+    // Gate the tool cards' "正在运行" on gost actually being up.
+    final proxyRunning = await _gost.isHealthy();
 
     try {
       final overview = await _dashboardApi.overview(token: session.token);
@@ -156,6 +197,7 @@ class AppService {
         selectedProxyUrl: selectedProxyUrl,
         codexInitSteps: codexInitSteps,
         claudeInitSteps: claudeInitSteps,
+        isProxyRunning: proxyRunning,
         message: localCheckError.isEmpty ? null : localCheckError,
       );
     } on ApiException catch (error) {
@@ -163,32 +205,46 @@ class AppService {
         await _sessionStore.clear();
         throw const UnauthenticatedException();
       }
-      return AppSnapshot(
-        environment: EnvironmentStatus.error,
-        account: _accountFor(session.user),
-        codex: await _codexConfig.readStatus(),
-        claude: await _claudeConfig.readStatus(),
-        localConfiguration: await _emptyLocalConfigurationStatus(),
+      return _errorSnapshot(
+        user: session.user,
         proxyOptions: proxyOptions,
         selectedProxyUrl: selectedProxyUrl,
-        codexInitSteps: await _codexInitializer().checkSteps(),
-        claudeInitSteps: await _claudeInitializer().checkSteps(),
+        isProxyRunning: proxyRunning,
         message: error.toString(),
       );
     } catch (error) {
-      return AppSnapshot(
-        environment: EnvironmentStatus.error,
-        account: _accountFor(session.user),
-        codex: await _codexConfig.readStatus(),
-        claude: await _claudeConfig.readStatus(),
-        localConfiguration: await _emptyLocalConfigurationStatus(),
+      return _errorSnapshot(
+        user: session.user,
         proxyOptions: proxyOptions,
         selectedProxyUrl: selectedProxyUrl,
-        codexInitSteps: await _codexInitializer().checkSteps(),
-        claudeInitSteps: await _claudeInitializer().checkSteps(),
+        isProxyRunning: proxyRunning,
         message: error.toString(),
       );
     }
+  }
+
+  /// The degraded snapshot shown when loading the remote dashboard fails: the
+  /// local tool state is still read live, the remote-derived fields are blank.
+  Future<AppSnapshot> _errorSnapshot({
+    required UserProfile user,
+    required List<ClientProxyOption> proxyOptions,
+    required String? selectedProxyUrl,
+    required bool isProxyRunning,
+    required String message,
+  }) async {
+    return AppSnapshot(
+      environment: EnvironmentStatus.error,
+      account: _accountFor(user),
+      codex: await _codexConfig.readStatus(),
+      claude: await _claudeConfig.readStatus(),
+      localConfiguration: await _emptyLocalConfigurationStatus(),
+      proxyOptions: proxyOptions,
+      selectedProxyUrl: selectedProxyUrl,
+      codexInitSteps: await _codexInitializer().checkSteps(),
+      claudeInitSteps: await _claudeInitializer().checkSteps(),
+      isProxyRunning: isProxyRunning,
+      message: message,
+    );
   }
 
   /// Priority order of the environment states shown in the dashboard banner.
@@ -212,7 +268,7 @@ class AppService {
   /// step is applied.
   ToolInitializer _codexInitializer({int userPackId = 0}) => codexInitializer(
     config: _codexConfig,
-    resolveProxyUrl: _resolveProxyUrl,
+    resolveProxyUrl: _resolveLocalProxyUrl,
     fetchAuth: () async => _codexAuthApi.createAuth(
       token: await _requireToken(),
       userPackId: userPackId,
@@ -222,7 +278,7 @@ class AppService {
   /// The Claude Code initialization steps; see [_codexInitializer].
   ToolInitializer _claudeInitializer({int userPackId = 0}) => claudeInitializer(
     config: _claudeConfig,
-    resolveProxyUrl: _resolveProxyUrl,
+    resolveProxyUrl: _resolveLocalProxyUrl,
     fetchAuth: () async => _claudeAuthApi.createAuth(
       token: await _requireToken(),
       userPackId: userPackId,
@@ -269,16 +325,17 @@ class AppService {
     await _claudeInitializer(userPackId: userPackId ?? 0).applyStep(stepId);
   }
 
-  /// Persists the proxy node picked in settings and immediately writes it into
-  /// the config of every tool that is already initialized (Codex `.env`,
-  /// Claude Code `settings.json`).
+  /// Persists the picked node and re-points gost's chain at it. Tools keep
+  /// pointing at the constant local proxy; their configs are re-pinned to it
+  /// only to migrate any that still carry an old remote address.
   Future<void> selectProxy(String url) async {
     await _proxyPreferences.save(url);
+    await _gost.applyProxyNode(url);
     if ((await _codexConfig.readStatus()).isInitialized) {
-      await _codexConfig.writeProxyEnv(url);
+      await _codexConfig.writeProxyEnv(AppConfig.gostLocalProxyUrl);
     }
     if ((await _claudeConfig.readStatus()).isInitialized) {
-      await _claudeConfig.writeProxySettings(url);
+      await _claudeConfig.writeProxySettings(AppConfig.gostLocalProxyUrl);
     }
   }
 
@@ -308,9 +365,11 @@ class AppService {
     return options.isEmpty ? null : options.first.url;
   }
 
-  /// Proxy url written during initialization, falling back to the built-in
-  /// address when the server list is unavailable or empty.
-  Future<String> _resolveProxyUrl() async {
+  /// The constant local go-gost proxy written into every tool's config.
+  Future<String> _resolveLocalProxyUrl() async => AppConfig.gostLocalProxyUrl;
+
+  /// The remote node gost forwards to, falling back to the built-in address.
+  Future<String> _resolveRemoteProxyUrl() async {
     final options = await _loadProxyOptions();
     final selected = await _selectedProxyUrlFor(options);
     return selected ?? AppConfig.proxyUrl;

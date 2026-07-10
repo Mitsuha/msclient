@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:desktop/ui/app_colors.dart';
 import 'package:desktop/ui/widgets/app_button.dart';
 import 'package:flutter/cupertino.dart';
 
@@ -43,7 +44,7 @@ class _LoginOverlayState extends State<LoginOverlay> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
           child: ColoredBox(
-            color: const Color(0x66F5F5F7),
+            color: AppColors.loginBarrier,
             child: Center(
               child: Container(
                 width: 360,
@@ -51,10 +52,10 @@ class _LoginOverlayState extends State<LoginOverlay> {
                 decoration: BoxDecoration(
                   color: CupertinoColors.white.withValues(alpha: 0.94),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFD7D7DB)),
+                  border: Border.all(color: AppColors.strongBorder),
                   boxShadow: const [
                     BoxShadow(
-                      color: Color(0x26000000),
+                      color: AppColors.overlayCardShadow,
                       blurRadius: 28,
                       offset: Offset(0, 16),
                     ),
@@ -74,7 +75,10 @@ class _LoginOverlayState extends State<LoginOverlay> {
                     const SizedBox(height: 6),
                     const Text(
                       '连接你的账户，同步余额、套餐与本机运行状态。',
-                      style: TextStyle(color: Color(0xFF6E6E73), fontSize: 13),
+                      style: TextStyle(
+                        color: AppColors.secondaryLabel,
+                        fontSize: 13,
+                      ),
                     ),
                     const SizedBox(height: 18),
                     CupertinoTextField(
@@ -105,7 +109,7 @@ class _LoginOverlayState extends State<LoginOverlay> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Color(0xFFFF3B30),
+                          color: AppColors.red,
                           fontSize: 12,
                         ),
                       ),
@@ -116,14 +120,14 @@ class _LoginOverlayState extends State<LoginOverlay> {
                       children: [
                         AppButton(
                           label: '退出',
-                          color: const Color(0xFFE9E9ED),
-                          textColor: const Color(0xFF1D1D1F),
+                          color: AppColors.neutralButtonBackground,
+                          textColor: AppColors.label,
                           onPressed: widget.isLoading ? null : widget.onExit,
                         ),
                         const SizedBox(width: 10),
                         AppButton(
                           label: '登录',
-                          color: const Color(0xFF007AFF),
+                          color: AppColors.blue,
                           onPressed: widget.isLoading ? null : _submit,
                           child: widget.isLoading
                               ? const CupertinoActivityIndicator(

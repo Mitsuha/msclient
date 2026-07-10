@@ -19,23 +19,20 @@ ToolInitializer claudeInitializer({
   required Future<String> Function() resolveProxyUrl,
   required Future<Map<String, dynamic>> Function() fetchAuth,
 }) {
-  return ToolInitializer(
-    [
-      InitStep(
-        id: ClaudeInitSteps.credentials,
-        title: '授权凭据',
-        description: '写入 MirrorStages 授权凭据（macOS 为钥匙串）并更新 ~/.claude.json 账户信息。',
-        check: config.hasMirrorStagesCredentials,
-        apply: () async => config.writeAuth(await fetchAuth()),
-      ),
-      InitStep(
-        id: ClaudeInitSteps.proxySettings,
-        title: '代理设置',
-        description: 'settings.json 中写入 HTTPS_PROXY / HTTP_PROXY 代理地址。',
-        check: config.hasProxySettings,
-        apply: () async => config.writeProxySettings(await resolveProxyUrl()),
-      ),
-    ],
-    preserveOriginals: config.preserveOriginals,
-  );
+  return ToolInitializer([
+    InitStep(
+      id: ClaudeInitSteps.credentials,
+      title: '授权凭据',
+      description: '写入 MirrorStages 授权凭据（macOS 为钥匙串）并更新 ~/.claude.json 账户信息。',
+      check: config.hasMirrorStagesCredentials,
+      apply: () async => config.writeAuth(await fetchAuth()),
+    ),
+    InitStep(
+      id: ClaudeInitSteps.proxySettings,
+      title: '代理设置',
+      description: 'settings.json 中写入 HTTPS_PROXY / HTTP_PROXY 代理地址。',
+      check: config.hasProxySettings,
+      apply: () async => config.writeProxySettings(await resolveProxyUrl()),
+    ),
+  ], preserveOriginals: config.preserveOriginals);
 }

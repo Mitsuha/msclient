@@ -20,30 +20,27 @@ ToolInitializer codexInitializer({
   required Future<String> Function() resolveProxyUrl,
   required Future<Map<String, dynamic>> Function() fetchAuth,
 }) {
-  return ToolInitializer(
-    [
-      InitStep(
-        id: CodexInitSteps.proxyEnv,
-        title: '代理环境变量',
-        description: '.env 中写入 http_proxy / https_proxy 代理地址。',
-        check: config.hasProxyEnv,
-        apply: () async => config.writeProxyEnv(await resolveProxyUrl()),
-      ),
-      InitStep(
-        id: CodexInitSteps.auth,
-        title: '授权凭据',
-        description: 'auth.json 中写入 MirrorStages 授权令牌。',
-        check: config.hasMirrorStagesAuth,
-        apply: () async => config.writeAuth(await fetchAuth()),
-      ),
-      InitStep(
-        id: CodexInitSteps.providerConfig,
-        title: 'Provider 配置',
-        description: 'config.toml 中不能存在自定义 provider。',
-        check: config.hasCleanProviderConfig,
-        apply: config.clearProviderConfig,
-      ),
-    ],
-    preserveOriginals: config.preserveOriginals,
-  );
+  return ToolInitializer([
+    InitStep(
+      id: CodexInitSteps.proxyEnv,
+      title: '代理环境变量',
+      description: '.env 中写入 http_proxy / https_proxy 代理地址。',
+      check: config.hasProxyEnv,
+      apply: () async => config.writeProxyEnv(await resolveProxyUrl()),
+    ),
+    InitStep(
+      id: CodexInitSteps.auth,
+      title: '授权凭据',
+      description: 'auth.json 中写入 MirrorStages 授权令牌。',
+      check: config.hasMirrorStagesAuth,
+      apply: () async => config.writeAuth(await fetchAuth()),
+    ),
+    InitStep(
+      id: CodexInitSteps.providerConfig,
+      title: 'Provider 配置',
+      description: 'config.toml 中不能存在自定义 provider。',
+      check: config.hasCleanProviderConfig,
+      apply: config.clearProviderConfig,
+    ),
+  ], preserveOriginals: config.preserveOriginals);
 }

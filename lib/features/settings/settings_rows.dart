@@ -1,3 +1,4 @@
+import 'package:desktop/ui/app_colors.dart';
 import 'package:flutter/cupertino.dart';
 
 /// A settings row with a label, one-line description, and either a
@@ -22,7 +23,7 @@ class StatusRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = enabled ? const Color(0xFF34C759) : const Color(0xFF8E8E93);
+    final color = enabled ? AppColors.green : AppColors.tertiaryLabel;
     final text = enabled ? enabledText : disabledText;
 
     return Padding(
@@ -36,7 +37,7 @@ class StatusRow extends StatelessWidget {
                 Text(
                   label,
                   style: const TextStyle(
-                    color: Color(0xFF1D1D1F),
+                    color: AppColors.label,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
@@ -47,7 +48,7 @@ class StatusRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Color(0xFF8E8E93),
+                    color: AppColors.tertiaryLabel,
                     fontSize: 12,
                   ),
                 ),
@@ -96,9 +97,7 @@ class ActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = destructive
-        ? const Color(0xFFFF3B30)
-        : const Color(0xFF007AFF);
+    final color = destructive ? AppColors.red : AppColors.blue;
     return CupertinoButton(
       minimumSize: Size.zero,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
@@ -112,7 +111,7 @@ class ActionRow extends StatelessWidget {
                 Text(
                   label,
                   style: const TextStyle(
-                    color: Color(0xFF1D1D1F),
+                    color: AppColors.label,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
@@ -123,7 +122,7 @@ class ActionRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Color(0xFF8E8E93),
+                    color: AppColors.tertiaryLabel,
                     fontSize: 12,
                   ),
                 ),
@@ -146,7 +145,7 @@ class RowDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Padding(
       padding: EdgeInsets.only(left: 14),
-      child: SizedBox(height: 1, child: ColoredBox(color: Color(0xFFE5E5EA))),
+      child: SizedBox(height: 1, child: ColoredBox(color: AppColors.border)),
     );
   }
 }

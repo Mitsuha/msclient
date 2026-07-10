@@ -50,8 +50,8 @@ Architecture: amd64
 Maintainer: MirrorStages <dev@mirrorstages.com>
 Installed-Size: $INSTALLED_SIZE
 Depends: libgtk-3-0, libayatana-appindicator3-1, libblkid1, liblzma5
-Description: MirrorStages Desktop control panel
- MirrorStages 桌面控制面板（Flutter, Cupertino 风格）。
+Description: Mirrorstages client
+ Mirrorstages desktop client.
 EOF
 
 mkdir -p "$OUT_DIR"

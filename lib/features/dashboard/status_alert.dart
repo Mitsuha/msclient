@@ -1,5 +1,6 @@
 import 'package:desktop/app/models/app_snapshot.dart';
 import 'package:desktop/features/dashboard/environment_status_presentation.dart';
+import 'package:desktop/ui/app_colors.dart';
 import 'package:desktop/ui/widgets/app_button.dart';
 import 'package:flutter/cupertino.dart';
 
@@ -53,7 +54,7 @@ class StatusAlert extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Color(0xFF3A3A3C),
+                    color: AppColors.icon,
                     fontSize: 12,
                     height: 1.35,
                   ),
@@ -66,8 +67,8 @@ class StatusAlert extends StatelessWidget {
             AppButton(
               label: '重新检查',
               compact: true,
-              color: const Color(0xFFFF3B30),
-              disabledColor: const Color(0xFFFFB3AD),
+              color: AppColors.red,
+              disabledColor: AppColors.redDisabledBright,
               onPressed: isWorking ? null : onRefresh,
             )
           else if (snapshot.environment ==
@@ -75,8 +76,8 @@ class StatusAlert extends StatelessWidget {
             AppButton(
               label: '安装证书',
               compact: true,
-              color: const Color(0xFFFF9500),
-              disabledColor: const Color(0xFFFFD59A),
+              color: AppColors.orange,
+              disabledColor: AppColors.orangeDisabled,
               onPressed: isWorking ? null : onInstallRootCertificate,
             )
           else

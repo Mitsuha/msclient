@@ -2,6 +2,7 @@ import 'package:desktop/app/models/app_snapshot.dart';
 import 'package:desktop/features/dashboard/status_alert.dart';
 import 'package:desktop/features/dashboard/subscription_summary.dart';
 import 'package:desktop/features/dashboard/tool_card.dart';
+import 'package:desktop/ui/app_colors.dart';
 import 'package:desktop/ui/widgets/app_button.dart';
 import 'package:desktop/ui/widgets/section_card.dart';
 import 'package:flutter/cupertino.dart';
@@ -55,6 +56,7 @@ class DashboardPage extends StatelessWidget {
                       title: 'Codex',
                       subtitle: 'OpenAI CLI',
                       status: snapshot.codex,
+                      isProxyRunning: snapshot.isProxyRunning,
                       isWorking: isWorking,
                       packs: packs,
                       onApplyBilling: onApplyCodexBilling,
@@ -67,6 +69,7 @@ class DashboardPage extends StatelessWidget {
                       title: 'Claude Code',
                       subtitle: 'Anthropic CLI',
                       status: snapshot.claude,
+                      isProxyRunning: snapshot.isProxyRunning,
                       isWorking: isWorking,
                       packs: packs,
                       onApplyBilling: onApplyClaudeBilling,
@@ -111,8 +114,8 @@ class _Toolbar extends StatelessWidget {
           icon: CupertinoIcons.arrow_clockwise,
           label: '刷新',
           compact: true,
-          color: const Color(0xFFE9E9ED),
-          textColor: const Color(0xFF1D1D1F),
+          color: AppColors.neutralButtonBackground,
+          textColor: AppColors.label,
           onPressed: isWorking ? null : onRefresh,
         ),
       ],
@@ -131,7 +134,7 @@ class _CodexBadge extends StatelessWidget {
       height: 48,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: const Color(0xFF1D1D1F),
+        color: AppColors.label,
         borderRadius: BorderRadius.circular(12),
       ),
       child: const Text(
@@ -158,7 +161,7 @@ class _ClaudeBadge extends StatelessWidget {
       height: 48,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: const Color(0xFFD97757),
+        color: AppColors.claudeBrand,
         borderRadius: BorderRadius.circular(12),
       ),
       child: const Icon(

@@ -1,5 +1,6 @@
 import 'package:desktop/core/utils/formatters.dart';
 import 'package:desktop/data/models/pack_models.dart';
+import 'package:desktop/ui/app_colors.dart';
 import 'package:flutter/cupertino.dart';
 
 /// Presents the macOS-style billing picker for a tool and resolves to the
@@ -53,7 +54,7 @@ class _BillingDialogState extends State<_BillingDialog> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x33000000),
+              color: AppColors.barrier,
               blurRadius: 40,
               offset: Offset(0, 18),
             ),
@@ -73,13 +74,16 @@ class _BillingDialogState extends State<_BillingDialog> {
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF1D1D1F),
+                      color: AppColors.label,
                     ),
                   ),
                   const SizedBox(height: 3),
                   const Text(
                     '选择后将重新写入本地凭据。',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF8E8E93)),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.tertiaryLabel,
+                    ),
                   ),
                 ],
               ),
@@ -114,8 +118,8 @@ class _BillingDialogState extends State<_BillingDialog> {
                   Expanded(
                     child: _DialogButton(
                       label: '取消',
-                      color: const Color(0xFFEAEAEC),
-                      textColor: const Color(0xFF1D1D1F),
+                      color: AppColors.secondaryButtonBackground,
+                      textColor: AppColors.label,
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ),
@@ -123,7 +127,7 @@ class _BillingDialogState extends State<_BillingDialog> {
                   Expanded(
                     child: _DialogButton(
                       label: '确定',
-                      color: const Color(0xFF007AFF),
+                      color: AppColors.blue,
                       textColor: CupertinoColors.white,
                       onPressed: () => Navigator.of(context).pop(_selected),
                     ),
@@ -138,7 +142,8 @@ class _BillingDialogState extends State<_BillingDialog> {
   }
 
   String _packSubtitle(UserPack pack) {
-    final remaining = '剩余额度 ${_amount(pack.remainAmount)}'
+    final remaining =
+        '剩余额度 ${_amount(pack.remainAmount)}'
         ' / ${_amount(pack.product.balance)}';
     final expireAt = pack.expireAt;
     if (expireAt == null) {
@@ -163,7 +168,7 @@ class _BillingOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const accent = Color(0xFF007AFF);
+    const accent = AppColors.blue;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
@@ -173,10 +178,12 @@ class _BillingOption extends StatelessWidget {
           margin: const EdgeInsets.symmetric(vertical: 4),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
           decoration: BoxDecoration(
-            color: selected ? const Color(0xFFF0F6FF) : const Color(0xFFF7F7F9),
+            color: selected
+                ? AppColors.selectedOptionBackground
+                : AppColors.optionBackground,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: selected ? accent : const Color(0xFFE5E5EA),
+              color: selected ? accent : AppColors.border,
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -192,7 +199,7 @@ class _BillingOption extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF1D1D1F),
+                        color: AppColors.label,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -200,7 +207,7 @@ class _BillingOption extends StatelessWidget {
                       subtitle,
                       style: const TextStyle(
                         fontSize: 12,
-                        color: Color(0xFF8E8E93),
+                        color: AppColors.tertiaryLabel,
                       ),
                     ),
                   ],
@@ -223,7 +230,7 @@ class _RadioMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const accent = Color(0xFF007AFF);
+    const accent = AppColors.blue;
     return Container(
       width: 20,
       height: 20,
@@ -231,7 +238,7 @@ class _RadioMark extends StatelessWidget {
         shape: BoxShape.circle,
         color: selected ? accent : CupertinoColors.white,
         border: Border.all(
-          color: selected ? accent : const Color(0xFFC7C7CC),
+          color: selected ? accent : AppColors.disabledButtonBackground,
           width: 1.5,
         ),
       ),
@@ -294,7 +301,7 @@ class _Divider extends StatelessWidget {
   Widget build(BuildContext context) {
     return const SizedBox(
       height: 1,
-      child: ColoredBox(color: Color(0xFFECECEF)),
+      child: ColoredBox(color: AppColors.divider),
     );
   }
 }

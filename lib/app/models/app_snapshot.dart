@@ -31,6 +31,7 @@ class AppSnapshot {
     this.selectedProxyUrl,
     this.codexInitSteps = const [],
     this.claudeInitSteps = const [],
+    this.isProxyRunning = false,
     this.message,
   });
 
@@ -41,6 +42,10 @@ class AppSnapshot {
   final LocalConfigurationStatus localConfiguration;
   final DashboardData? dashboard;
   final List<ConflictProcess> conflicts;
+
+  /// Whether the local go-gost proxy is up. The tools route through it, so a
+  /// tool only counts as "running" when it is initialized *and* this is true.
+  final bool isProxyRunning;
 
   /// Proxy nodes fetched from the server (already sorted; first is the
   /// default) and the url currently in effect for initialization.

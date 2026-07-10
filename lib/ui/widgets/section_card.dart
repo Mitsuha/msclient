@@ -1,3 +1,4 @@
+import 'package:desktop/ui/app_colors.dart';
 import 'package:flutter/cupertino.dart';
 
 class SectionCard extends StatelessWidget {
@@ -14,7 +15,7 @@ class SectionCard extends StatelessWidget {
         Text(
           title,
           style: const TextStyle(
-            color: Color(0xFF6E6E73),
+            color: AppColors.secondaryLabel,
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
@@ -22,9 +23,9 @@ class SectionCard extends StatelessWidget {
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
-            color: const Color(0xFFFBFBFD),
+            color: AppColors.sectionBackground,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFE5E5EA)),
+            border: Border.all(color: AppColors.border),
           ),
           child: child,
         ),

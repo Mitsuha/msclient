@@ -16,9 +16,8 @@ void main() {
   testWidgets('shows running control panel state', (tester) async {
     await tester.pumpWidget(
       ChangeNotifierProvider(
-        create: (_) =>
-            AppViewModel(service: _FakeAppService())..bootstrap(),
-        child: const CupertinoApp(home: AppShell()),
+        create: (_) => AppViewModel(service: _FakeAppService())..bootstrap(),
+        child: CupertinoApp(home: AppShell(onExit: () {})),
       ),
     );
 
@@ -60,6 +59,7 @@ class _FakeAppService implements AppService {
           planType: 'Max 20X',
         ),
       ),
+      isProxyRunning: true,
       localConfiguration: LocalConfigurationStatus(
         codexDirectoryPath: '/Users/test/.codex',
         claudeDirectoryPath: '/Users/test/.claude',
@@ -143,6 +143,17 @@ class _FakeAppService implements AppService {
 
   @override
   Future<void> selectProxy(String url) async {}
+
+  @override
+  Future<void> clearProxyConfig() {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> startGost() async {}
+
+  @override
+  Future<void> stopGost() async {}
 
   @override
   Future<void> applyCodexInitStep(String stepId) {

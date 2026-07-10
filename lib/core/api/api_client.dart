@@ -45,7 +45,9 @@ class ApiClient {
       );
     }
 
-    final json = body is Map<String, dynamic> ? body : const <String, dynamic>{};
+    final json = body is Map<String, dynamic>
+        ? body
+        : const <String, dynamic>{};
     throw ApiException(
       statusCode: response.statusCode,
       error: json['error']?.toString(),

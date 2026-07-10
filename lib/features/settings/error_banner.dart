@@ -1,3 +1,4 @@
+import 'package:desktop/ui/app_colors.dart';
 import 'package:flutter/cupertino.dart';
 
 /// Red-tinted banner surfacing the latest operation error.
@@ -11,7 +12,7 @@ class ErrorBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
-        color: const Color(0xFFFF3B30).withValues(alpha: 0.1),
+        color: AppColors.red.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -19,14 +20,14 @@ class ErrorBanner extends StatelessWidget {
         children: [
           const Icon(
             CupertinoIcons.exclamationmark_triangle_fill,
-            color: Color(0xFFFF3B30),
+            color: AppColors.red,
             size: 16,
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(color: Color(0xFFC7362C), fontSize: 12),
+              style: const TextStyle(color: AppColors.errorText, fontSize: 12),
             ),
           ),
         ],

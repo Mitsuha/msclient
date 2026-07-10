@@ -30,7 +30,7 @@ class WindowTray {
       return;
     }
     await trayManager.setIcon(_iconPath);
-    await trayManager.setToolTip('MirrorStages');
+    await trayManager.setToolTip('Mirrorstages');
     await trayManager.setContextMenu(
       Menu(
         items: [

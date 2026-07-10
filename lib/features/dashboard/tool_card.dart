@@ -3,14 +3,17 @@ import 'dart:async';
 import 'package:desktop/app/models/tool_status.dart';
 import 'package:desktop/data/models/pack_models.dart';
 import 'package:desktop/features/dashboard/billing_dialog.dart';
+import 'package:desktop/ui/app_colors.dart';
 import 'package:flutter/cupertino.dart';
 
 /// Dashboard card for a local AI CLI tool's configuration (Codex, Claude Code).
 ///
-/// Always surfaces the account fields (empty until initialized); the header
-/// shows a running pill once initialized, or an idle badge otherwise. The
-/// bottom action is `更换计费` when initialized, or `初始化` when not — both open
-/// the billing picker and apply the chosen method via [onApplyBilling].
+/// Always surfaces the account fields (empty until initialized). The header
+/// pill reflects three states: `未初始化` before setup, `正在运行` once the tool is
+/// initialized *and* the local go-gost proxy it routes through is up, or
+/// `代理未运行` when it is initialized but that proxy is down. The bottom action
+/// is `更换计费` when initialized, or `初始化` when not — both open the billing
+/// picker and apply the chosen method via [onApplyBilling].
 class ToolCard extends StatelessWidget {
   const ToolCard({
     super.key,
@@ -18,6 +21,7 @@ class ToolCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.status,
+    required this.isProxyRunning,
     required this.isWorking,
     required this.packs,
     required this.onApplyBilling,
@@ -28,6 +32,11 @@ class ToolCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final ToolStatus status;
+
+  /// Whether the local go-gost proxy is up. An initialized tool only counts as
+  /// "正在运行" while this holds, since every request routes through that proxy.
+  final bool isProxyRunning;
+
   final bool isWorking;
 
   /// The subscriptions offered in the billing picker.
@@ -45,10 +54,10 @@ class ToolCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: CupertinoColors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E5EA)),
+        border: Border.all(color: AppColors.border),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x0F000000),
+            color: AppColors.cardShadow,
             blurRadius: 18,
             offset: Offset(0, 6),
           ),
@@ -61,7 +70,11 @@ class ToolCard extends StatelessWidget {
             leading: leading,
             title: title,
             subtitle: subtitle,
-            isRunning: account != null,
+            pill: account == null
+                ? _PillState.idle
+                : isProxyRunning
+                ? _PillState.running
+                : _PillState.proxyDown,
           ),
           const _Divider(),
           _Body(
@@ -77,18 +90,22 @@ class ToolCard extends StatelessWidget {
   }
 }
 
+/// The header pill's three states: not yet set up, running through a healthy
+/// proxy, or set up but the local proxy is down.
+enum _PillState { idle, running, proxyDown }
+
 class _Header extends StatelessWidget {
   const _Header({
     required this.leading,
     required this.title,
     required this.subtitle,
-    required this.isRunning,
+    required this.pill,
   });
 
   final Widget leading;
   final String title;
   final String subtitle;
-  final bool isRunning;
+  final _PillState pill;
 
   @override
   Widget build(BuildContext context) {
@@ -107,7 +124,7 @@ class _Header extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF1D1D1F),
+                    color: AppColors.label,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -115,72 +132,59 @@ class _Header extends StatelessWidget {
                   subtitle,
                   style: const TextStyle(
                     fontSize: 13,
-                    color: Color(0xFF8E8E93),
+                    color: AppColors.tertiaryLabel,
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 12),
-          isRunning ? const _RunningPill() : const _IdlePill(),
+          _StatusPill(state: pill),
         ],
       ),
     );
   }
 }
 
-class _RunningPill extends StatelessWidget {
-  const _RunningPill();
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.state});
+
+  final _PillState state;
 
   @override
   Widget build(BuildContext context) {
-    const green = Color(0xFF248A3D);
+    final (label, fg, bg) = switch (state) {
+      _PillState.running => (
+        '正在运行',
+        AppColors.successText,
+        AppColors.successBackground,
+      ),
+      _PillState.proxyDown => (
+        '代理未运行',
+        AppColors.dangerText,
+        AppColors.dangerBackground,
+      ),
+      _PillState.idle => (
+        '未初始化',
+        AppColors.tertiaryLabel,
+        AppColors.mutedBackground,
+      ),
+    };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFE3F7EA),
+        color: bg,
         borderRadius: BorderRadius.circular(999),
       ),
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _Dot(color: green),
-          SizedBox(width: 6),
+          _Dot(color: fg),
+          const SizedBox(width: 6),
           Text(
-            '正在运行',
+            label,
             style: TextStyle(
-              color: green,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _IdlePill extends StatelessWidget {
-  const _IdlePill();
-
-  @override
-  Widget build(BuildContext context) {
-    const gray = Color(0xFF8E8E93);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEFEFF4),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _Dot(color: gray),
-          SizedBox(width: 6),
-          Text(
-            '未初始化',
-            style: TextStyle(
-              color: gray,
+              color: fg,
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
@@ -314,8 +318,8 @@ class _BodyState extends State<_Body> {
       // Success state: green confirmation prompting the user to restart the CLI.
       return _WideButton(
         label: '需重启${widget.toolName}后生效',
-        color: const Color(0xFFE3F7EA),
-        textColor: const Color(0xFF248A3D),
+        color: AppColors.successBackground,
+        textColor: AppColors.successText,
         onPressed: _isApplying ? null : _pickBilling,
       );
     }
@@ -324,10 +328,10 @@ class _BodyState extends State<_Body> {
     return _WideButton(
       label: baseLabel,
       loading: _isApplying,
-      color: isInitialized ? const Color(0xFFEAEAEC) : const Color(0xFFFF9500),
-      textColor: isInitialized
-          ? const Color(0xFF1D1D1F)
-          : CupertinoColors.white,
+      color: isInitialized
+          ? AppColors.secondaryButtonBackground
+          : AppColors.orange,
+      textColor: isInitialized ? AppColors.label : CupertinoColors.white,
       onPressed: disabled ? null : _pickBilling,
     );
   }
@@ -345,7 +349,7 @@ class _InfoRow extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 14, color: Color(0xFF8E8E93)),
+          style: const TextStyle(fontSize: 14, color: AppColors.tertiaryLabel),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -372,7 +376,7 @@ class _ValueText extends StatelessWidget {
       style: TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w600,
-        color: isEmpty ? const Color(0xFFB0B0B5) : const Color(0xFF1D1D1F),
+        color: isEmpty ? AppColors.placeholderText : AppColors.label,
       ),
     );
   }
@@ -388,13 +392,13 @@ class _PlanBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFFE8EBFF),
+        color: AppColors.planBadgeBackground,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
         planType,
         style: const TextStyle(
-          color: Color(0xFF3B5BDB),
+          color: AppColors.planBadgeText,
           fontSize: 13,
           fontWeight: FontWeight.w700,
         ),
@@ -473,7 +477,7 @@ class _Divider extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Padding(
       padding: EdgeInsets.symmetric(horizontal: 18),
-      child: SizedBox(height: 1, child: ColoredBox(color: Color(0xFFECECEF))),
+      child: SizedBox(height: 1, child: ColoredBox(color: AppColors.divider)),
     );
   }
 }

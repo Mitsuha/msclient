@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:desktop/app/models/account_summary.dart';
 import 'package:desktop/app/models/nav_section.dart';
 import 'package:desktop/features/shell/account_menu.dart';
+import 'package:desktop/ui/app_colors.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -27,8 +28,8 @@ class AppSidebar extends StatelessWidget {
     return Container(
       width: 190,
       decoration: const BoxDecoration(
-        color: Color(0xFFF4F4F6),
-        border: Border(right: BorderSide(color: Color(0xFFD7D7DB))),
+        color: AppColors.sidebarBackground,
+        border: Border(right: BorderSide(color: AppColors.strongBorder)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -40,9 +41,11 @@ class AppSidebar extends StatelessWidget {
             const SizedBox(height: 12),
           ],
           Padding(
-            padding: Platform.isWindows ? EdgeInsetsGeometry.symmetric(horizontal: 18): const EdgeInsetsGeometry.only(left: 18, right: 18, top: 8),
+            padding: Platform.isWindows
+                ? EdgeInsetsGeometry.symmetric(horizontal: 18)
+                : const EdgeInsetsGeometry.only(left: 18, right: 18, top: 8),
             child: Text(
-              'MirrorStages',
+              'Mirrorstages',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
           ),
@@ -98,17 +101,17 @@ class _SidebarItem extends StatelessWidget {
           margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            color: selected ? const Color(0xFFE5E5EA) : null,
+            color: selected ? AppColors.border : null,
             borderRadius: BorderRadius.circular(7),
           ),
           child: Row(
             children: [
-              Icon(icon, size: 17, color: const Color(0xFF3A3A3C)),
+              Icon(icon, size: 17, color: AppColors.icon),
               const SizedBox(width: 9),
               Text(
                 label,
                 style: TextStyle(
-                  color: const Color(0xFF1D1D1F),
+                  color: AppColors.label,
                   fontSize: 13,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                 ),

@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:ui' show AppExitResponse;
+
 import 'package:desktop/app/app_service.dart';
 import 'package:desktop/app/app_view_model.dart';
 import 'package:desktop/features/shell/app_shell.dart';
 import 'package:desktop/system/window_tray.dart';
+import 'package:desktop/ui/app_colors.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -22,9 +26,24 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
     with WindowListener, TrayListener {
   final WindowTray _tray = const WindowTray();
 
+  /// Held here (rather than created inside the provider) so the tray quit path
+  /// can shut gost down before the window is destroyed.
+  late final AppViewModel _viewModel;
+
+  /// Catches every real app-exit path — macOS ⌘Q / dock "Quit" / app-menu
+  /// Quit, not just the tray item — so gost is always stopped before the
+  /// process dies. Window close/minimize does *not* come through here: it
+  /// hides to the tray (see [onWindowClose]) and gost keeps running.
+  late final AppLifecycleListener _lifecycleListener;
+  Future<void>? _shutdown;
+
   @override
   void initState() {
     super.initState();
+    _viewModel = AppViewModel(service: AppService.production())..bootstrap();
+    _lifecycleListener = AppLifecycleListener(
+      onExitRequested: _handleExitRequested,
+    );
     windowManager.addListener(this);
     trayManager.addListener(this);
     _tray.install();
@@ -34,8 +53,15 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
   void dispose() {
     trayManager.removeListener(this);
     windowManager.removeListener(this);
+    _lifecycleListener.dispose();
     _tray.remove();
+    _viewModel.dispose();
     super.dispose();
+  }
+
+  Future<AppExitResponse> _handleExitRequested() async {
+    await _shutdownApp();
+    return AppExitResponse.exit;
   }
 
   @override
@@ -62,27 +88,33 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
       case WindowTray.showItemKey:
         _tray.showWindow();
       case WindowTray.quitItemKey:
-        _tray.quit();
+        unawaited(_quit());
     }
   }
+
+  Future<void> _quit() async {
+    await _shutdownApp();
+    await _tray.quit();
+  }
+
+  Future<void> _shutdownApp() => _shutdown ??= _viewModel.shutdown();
 
   Future<void> _hideWindow() => _tray.hideWindow();
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) =>
-          AppViewModel(service: AppService.production())..bootstrap(),
+    return ChangeNotifierProvider<AppViewModel>.value(
+      value: _viewModel,
       child: CupertinoApp(
-        title: 'MirrorStages',
+        title: 'Mirrorstages',
         debugShowCheckedModeBanner: false,
         theme: const CupertinoThemeData(
           brightness: Brightness.light,
-          primaryColor: Color(0xFF007AFF),
-          scaffoldBackgroundColor: Color(0xFFF5F5F7),
+          primaryColor: AppColors.blue,
+          scaffoldBackgroundColor: AppColors.windowBackground,
           textTheme: CupertinoTextThemeData(
             textStyle: TextStyle(
-              color: Color(0xFF1D1D1F),
+              color: AppColors.label,
               fontSize: 14,
               letterSpacing: 0,
             ),
@@ -102,7 +134,10 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
                 },
               ),
             },
-            child: const Focus(autofocus: true, child: AppShell()),
+            child: Focus(
+              autofocus: true,
+              child: AppShell(onExit: () => unawaited(_quit())),
+            ),
           ),
         ),
       ),

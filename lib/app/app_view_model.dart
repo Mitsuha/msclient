@@ -43,6 +43,10 @@ class AppViewModel extends ChangeNotifier {
   String? get loginErrorMessage => _loginErrorMessage;
 
   Future<void> bootstrap() async {
+    // Launch the local proxy in the background; first run downloads the gost
+    // binary, so this must not block the login UI.
+    unawaited(_service.startGost());
+
     _isAuthenticated = await _service.hasSession();
     _isAuthReady = true;
     notifyListeners();
@@ -51,6 +55,13 @@ class AppViewModel extends ChangeNotifier {
       await load();
       _startAutoRefresh();
     }
+  }
+
+  /// Tears down background work and stops the local proxy. Call before the app
+  /// really quits (the tray "退出" item / a forced destroy).
+  Future<void> shutdown() async {
+    _stopAutoRefresh();
+    await _service.stopGost();
   }
 
   Future<void> load() async {
@@ -91,8 +102,7 @@ class AppViewModel extends ChangeNotifier {
     });
   }
 
-  /// Persists the chosen proxy node url and writes it straight into the
-  /// configs of the tools that are already initialized.
+  /// Persists the chosen node and re-points gost's chain at it.
   Future<void> selectProxy(String url) async {
     await _run(() async {
       await _service.selectProxy(url);

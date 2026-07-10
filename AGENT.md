@@ -23,19 +23,22 @@ lib/
 │   │              AppViewModel, AppService (facade), exceptions
 │   ├── initialization/  step-based tool init (InitStep, ToolInitializer,
 │   │              per-tool step factories) — see docs/initialization.md
+│   ├── gost/      GostController: download → launch → configure the local
+│   │              go-gost proxy over its API — see docs/gost.md
 │   └── models/    UI-facing aggregates: AppSnapshot, AccountSummary,
 │                  LocalConfigurationStatus, NavSection
 ├── core/          generic, domain-free: ApiClient, utils (json/jwt/formatters)
 ├── data/          remote APIs, DTOs, SessionStore
 ├── system/        local-machine integration: dart:io, Process.run,
 │                  MethodChannel (home dir, env file, process inspector,
-│                  root certificate, codex config + backup)
+│                  root certificate, codex config + backup, gost binary +
+│                  process)
 ├── ui/widgets/    design-system widgets, business-agnostic
 └── features/      screens by content: shell/ dashboard/ settings/ auth/
 ```
 
 **Dependency rule** (imports must point this way only):
-`features → { app, data, system, ui, core }`; `app → { data, system, core }`;
+`features → { app, data, system, ui, core }`; `app → { data, system, ui, core }`;
 `data → core`; `system → core`; `ui → core`.
 Exception: `app/app.dart` is the composition root and may import `features/`.
 
@@ -47,6 +50,8 @@ Exception: `app/app.dart` is the composition root and may import `features/`.
 - Constants (URLs, asset paths) go in `app/app_config.dart`. The platform
   channel is `system/platform_channel.dart` and must stay in sync with
   `macos/Runner/MainFlutterWindow.swift`.
+- Colors come from `ui/app_colors.dart` (`AppColors.*`) — never inline a
+  `Color(0x...)` literal in a widget; add a named token instead.
 - OS-specific work (Process.run, file IO under `~`, trust stores) belongs in
   `system/`, one class per concern, returning primitives — the `AppService`
   facade assembles them into `app/models/` values.

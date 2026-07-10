@@ -1,4 +1,5 @@
 import 'package:desktop/data/models/pack_models.dart';
+import 'package:desktop/ui/app_colors.dart';
 import 'package:flutter/cupertino.dart';
 
 /// Copy and color for each [UserPackStatus] shown in the subscription card.
@@ -13,9 +14,9 @@ String packStatusText(UserPackStatus status) {
 
 Color packStatusColor(UserPackStatus status) {
   return switch (status) {
-    UserPackStatus.active => const Color(0xFF34C759),
-    UserPackStatus.exhausted => const Color(0xFFFF9500),
-    UserPackStatus.expired => const Color(0xFF8E8E93),
-    UserPackStatus.unknown => const Color(0xFF8E8E93),
+    UserPackStatus.active => AppColors.green,
+    UserPackStatus.exhausted => AppColors.orange,
+    UserPackStatus.expired => AppColors.tertiaryLabel,
+    UserPackStatus.unknown => AppColors.tertiaryLabel,
   };
 }

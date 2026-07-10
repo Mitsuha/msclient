@@ -10,7 +10,7 @@
   #define SourceDir "..\..\build\windows\x64\runner\Release"
 #endif
 
-#define MyAppName "MirrorStages Desktop"
+#define MyAppName "Mirrorstages"
 #define MyAppPublisher "MirrorStages"
 #define MyAppExeName "desktop.exe"
 
@@ -20,8 +20,8 @@ AppId={{B3D9E2A1-7C4F-4E6A-9F2D-1A8C5E0B6D34}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={autopf}\MirrorStages Desktop
-DefaultGroupName=MirrorStages Desktop
+DefaultDirName={autopf}\Mirrorstages
+DefaultGroupName=Mirrorstages
 DisableProgramGroupPage=yes
 UninstallDisplayIcon={app}\{#MyAppExeName}
 OutputBaseFilename=MirrorStages-Desktop-{#MyAppVersion}-windows-x64-setup
@@ -46,4 +46,4 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch MirrorStages Desktop"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch Mirrorstages"; Flags: nowait postinstall skipifsilent

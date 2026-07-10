@@ -2,6 +2,7 @@ import 'package:desktop/app/initialization/tool_initializer.dart';
 import 'package:desktop/app/models/app_snapshot.dart';
 import 'package:desktop/features/settings/error_banner.dart';
 import 'package:desktop/features/settings/settings_rows.dart';
+import 'package:desktop/ui/app_colors.dart';
 import 'package:desktop/ui/widgets/app_button.dart';
 import 'package:desktop/ui/widgets/section_card.dart';
 import 'package:flutter/cupertino.dart';
@@ -136,8 +137,8 @@ class _SettingsToolbar extends StatelessWidget {
           icon: CupertinoIcons.arrow_clockwise,
           label: '刷新',
           compact: true,
-          color: const Color(0xFFE9E9ED),
-          textColor: const Color(0xFF1D1D1F),
+          color: AppColors.neutralButtonBackground,
+          textColor: AppColors.label,
           onPressed: isWorking ? null : onRefresh,
         ),
       ],
@@ -187,15 +188,18 @@ class _ProxySettings extends StatelessWidget {
                 Text(
                   '服务节点',
                   style: TextStyle(
-                    color: Color(0xFF1D1D1F),
+                    color: AppColors.label,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 SizedBox(height: 3),
                 Text(
-                  '在连接慢时可尝试切换节点，需重启 Codex / Claude 生效',
-                  style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12),
+                  '在连接慢时可尝试切换节点',
+                  style: TextStyle(
+                    color: AppColors.tertiaryLabel,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -219,7 +223,7 @@ class _ProxySettings extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Color(0xFF1D1D1F),
+                          color: AppColors.label,
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                         ),
@@ -270,8 +274,8 @@ class _InitStepRows extends StatelessWidget {
                 : AppButton(
                     label: '修复',
                     compact: true,
-                    color: const Color(0xFFFF9500),
-                    disabledColor: const Color(0xFFFFD59A),
+                    color: AppColors.orange,
+                    disabledColor: AppColors.orangeDisabled,
                     onPressed: isWorking ? null : () => onApplyStep(step.id),
                   ),
           ),
@@ -313,7 +317,7 @@ class _CodexSettings extends StatelessWidget {
           StatusRow(
             label: 'MirrorStages 授权',
             description: snapshot.codex.isInitialized
-                ? 'Codex 已配置 MirrorStages 授权和代理环境。'
+                ? 'Codex 已配置 MirrorStages 授权凭证'
                 : '需要初始化后才能使用 MirrorStages 账号运行 Codex。',
             enabled: snapshot.codex.isInitialized,
             enabledText: '已初始化',
@@ -330,15 +334,15 @@ class _CodexSettings extends StatelessWidget {
           label: '恢复原始配置',
           description: configuration.canRestoreCodexConfig
               ? '将恢复到初始化之前的配置。'
-              : '暂无可恢复的备份，初始化后才会生成 old_config 备份。',
+              : '暂无可恢复的备份，初始化后才会生成备份。',
           enabled: true,
           enabledText: '',
           disabledText: '',
           trailing: AppButton(
             label: '恢复',
             compact: true,
-            color: const Color(0xFFFF3B30),
-            disabledColor: const Color(0xFFFFC3BF),
+            color: AppColors.red,
+            disabledColor: AppColors.redDisabled,
             onPressed: (isWorking || !configuration.canRestoreCodexConfig)
                 ? null
                 : () => _confirmRestore(context, onRestoreCodexConfig),
@@ -371,7 +375,7 @@ class _ClaudeSettings extends StatelessWidget {
           label: 'Claude 客户端',
           description: configuration.isClaudeInstalled
               ? '已检测到本机 Claude 配置目录。'
-              : '未检测到 Claude，本功能不会影响 Codex 使用。',
+              : '未检测到 Claude，请确认已经安装并且至少运行过一次。',
           enabled: configuration.isClaudeInstalled,
           enabledText: '已安装',
           disabledText: '未安装',
@@ -396,16 +400,16 @@ class _ClaudeSettings extends StatelessWidget {
         StatusRow(
           label: '恢复原始配置',
           description: configuration.canRestoreClaudeConfig
-              ? '将恢复到初始化之前的登录凭据和 settings.json。'
-              : '暂无可恢复的备份，初始化后才会生成 old_config 备份。',
+              ? '将恢复到初始化之前的登录凭据'
+              : '暂无可恢复的备份，初始化后才会生成备份。',
           enabled: true,
           enabledText: '',
           disabledText: '',
           trailing: AppButton(
             label: '恢复',
             compact: true,
-            color: const Color(0xFFFF3B30),
-            disabledColor: const Color(0xFFFFC3BF),
+            color: AppColors.red,
+            disabledColor: AppColors.redDisabled,
             onPressed: (isWorking || !configuration.canRestoreClaudeConfig)
                 ? null
                 : () => _confirmRestore(context, onRestoreClaudeConfig),
@@ -418,10 +422,7 @@ class _ClaudeSettings extends StatelessWidget {
 
 /// Confirms a destructive "restore original config" action, invoking
 /// [onConfirmed] only when the user accepts.
-Future<void> _confirmRestore(
-  BuildContext context,
-  VoidCallback onConfirmed,
-) {
+Future<void> _confirmRestore(BuildContext context, VoidCallback onConfirmed) {
   return _confirmDestructive(
     context,
     title: '恢复原始配置',
@@ -478,21 +479,22 @@ class _ClearConfigSettings extends StatelessWidget {
   Widget build(BuildContext context) {
     return StatusRow(
       label: '清除代理配置',
-      description: '移除 Claude settings.json 的代理项并删除 Codex .env，其它配置保持不变。',
+      description: '如果遇到无法使用第三方 API 的情况，可以尝试清除代理配置',
       enabled: true,
       enabledText: '',
       disabledText: '',
       trailing: AppButton(
         label: '清除',
         compact: true,
-        color: const Color(0xFFFF3B30),
-        disabledColor: const Color(0xFFFFC3BF),
+        color: AppColors.red,
+        disabledColor: AppColors.redDisabled,
         onPressed: isWorking
             ? null
             : () => _confirmDestructive(
                 context,
                 title: '清除代理配置',
-                content: '将移除 Claude settings.json 的代理项并删除 Codex .env，需要重新初始化才能运行',
+                content:
+                    '将移除Codex 和 Claude Code 里和 MirrorStages 相关的配置，清除后需要重新初始化才能使用。',
                 confirmLabel: '清除',
                 onConfirmed: onClearConfig,
               ),
@@ -518,8 +520,8 @@ class _CertificateSettings extends StatelessWidget {
     return StatusRow(
       label: 'MirrorStages 根证书',
       description: certificate.isInstalled
-          ? '本机已信任 MirrorStages 根证书。'
-          : '安装后，本机 HTTPS 代理连接会被信任。',
+          ? '已经安装 MirrorStages 证书，可以正常使用。'
+          : '需要安装 Mirrorstages 的证书才能正常使用。',
       enabled: certificate.isInstalled,
       enabledText: '已安装',
       disabledText: '未安装',
@@ -528,8 +530,8 @@ class _CertificateSettings extends StatelessWidget {
           : AppButton(
               label: '安装',
               compact: true,
-              color: const Color(0xFFFF9500),
-              disabledColor: const Color(0xFFFFD59A),
+              color: AppColors.orange,
+              disabledColor: AppColors.orangeDisabled,
               onPressed: isWorking ? null : onInstall,
             ),
     );

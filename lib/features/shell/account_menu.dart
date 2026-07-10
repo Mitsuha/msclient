@@ -1,4 +1,5 @@
 import 'package:desktop/app/models/account_summary.dart';
+import 'package:desktop/ui/app_colors.dart';
 import 'package:flutter/cupertino.dart';
 
 /// The signed-in account tile at the bottom of the sidebar. Tapping it opens
@@ -100,7 +101,9 @@ class _AccountMenuState extends State<AccountMenu> {
             margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
             padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
             decoration: BoxDecoration(
-              color: (_isOpen || _hovered) ? const Color(0xFFE1E1E5) : null,
+              color: (_isOpen || _hovered)
+                  ? AppColors.menuHoverBackground
+                  : null,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
@@ -118,7 +121,7 @@ class _AccountMenuState extends State<AccountMenu> {
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF1D1D1F),
+                          color: AppColors.label,
                         ),
                       ),
                       const SizedBox(height: 1),
@@ -128,7 +131,7 @@ class _AccountMenuState extends State<AccountMenu> {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 11,
-                          color: Color(0xFF6E6E73),
+                          color: AppColors.secondaryLabel,
                         ),
                       ),
                     ],
@@ -138,7 +141,7 @@ class _AccountMenuState extends State<AccountMenu> {
                 const Icon(
                   CupertinoIcons.chevron_up_chevron_down,
                   size: 13,
-                  color: Color(0xFF6E6E73),
+                  color: AppColors.secondaryLabel,
                 ),
               ],
             ),
@@ -167,10 +170,10 @@ class _MenuPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: CupertinoColors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E5EA)),
+        border: Border.all(color: AppColors.border),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x24000000),
+            color: AppColors.menuShadow,
             blurRadius: 28,
             offset: Offset(0, 10),
           ),
@@ -197,7 +200,7 @@ class _MenuPanel extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF1D1D1F),
+                          color: AppColors.label,
                         ),
                       ),
                       const SizedBox(height: 1),
@@ -207,7 +210,7 @@ class _MenuPanel extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 12,
-                          color: Color(0xFF6E6E73),
+                          color: AppColors.secondaryLabel,
                         ),
                       ),
                     ],
@@ -265,19 +268,16 @@ class _MenuItemState extends State<_MenuItem> {
           margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
           decoration: BoxDecoration(
-            color: _hovered ? const Color(0xFFF2F2F7) : null,
+            color: _hovered ? AppColors.hoverBackground : null,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             children: [
-              Icon(widget.icon, size: 17, color: const Color(0xFF1D1D1F)),
+              Icon(widget.icon, size: 17, color: AppColors.label),
               const SizedBox(width: 10),
               Text(
                 widget.label,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF1D1D1F),
-                ),
+                style: const TextStyle(fontSize: 13, color: AppColors.label),
               ),
             ],
           ),
@@ -294,7 +294,7 @@ class _MenuDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return const SizedBox(
       height: 1,
-      child: ColoredBox(color: Color(0xFFE5E5EA)),
+      child: ColoredBox(color: AppColors.border),
     );
   }
 }
@@ -312,7 +312,7 @@ class _Avatar extends StatelessWidget {
       height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: const Color(0xFFE1E1E5),
+        color: AppColors.menuHoverBackground,
         borderRadius: BorderRadius.circular(size * 0.3),
       ),
       child: Text(
@@ -320,7 +320,7 @@ class _Avatar extends StatelessWidget {
         style: TextStyle(
           fontSize: size * 0.4,
           fontWeight: FontWeight.w600,
-          color: const Color(0xFF3A3A3C),
+          color: AppColors.icon,
         ),
       ),
     );

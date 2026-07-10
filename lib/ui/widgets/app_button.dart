@@ -1,3 +1,4 @@
+import 'package:desktop/ui/app_colors.dart';
 import 'package:flutter/cupertino.dart';
 
 class AppButton extends StatelessWidget {
@@ -9,7 +10,7 @@ class AppButton extends StatelessWidget {
     this.icon,
     this.child,
     this.textColor = CupertinoColors.white,
-    this.disabledColor = const Color(0xFFC7C7CC),
+    this.disabledColor = AppColors.disabledButtonBackground,
     this.compact = false,
   });
 

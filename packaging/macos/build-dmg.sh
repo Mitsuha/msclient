@@ -10,7 +10,7 @@ VERSION="${1:?version required}"
 APP_PATH="${2:?app path required}"
 OUT_DIR="${3:?out dir required}"
 
-VOLNAME="MirrorStages Desktop"
+VOLNAME="Mirrorstages"
 mkdir -p "$OUT_DIR"
 OUT_FILE="$OUT_DIR/MirrorStages-Desktop-${VERSION}-macos.dmg"
 rm -f "$OUT_FILE"

@@ -1,6 +1,7 @@
 import 'package:desktop/core/utils/formatters.dart';
 import 'package:desktop/data/models/pack_models.dart';
 import 'package:desktop/features/dashboard/pack_status_presentation.dart';
+import 'package:desktop/ui/app_colors.dart';
 import 'package:desktop/ui/widgets/summary_icon.dart';
 import 'package:flutter/cupertino.dart';
 
@@ -44,8 +45,8 @@ class _PackRow extends StatelessWidget {
         children: [
           const SummaryIcon(
             icon: CupertinoIcons.sparkles,
-            color: Color(0xFF007AFF),
-            background: Color(0xFFE8F2FF),
+            color: AppColors.blue,
+            background: AppColors.blueChipBackground,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -87,7 +88,7 @@ class _PackRow extends StatelessWidget {
                       child: Text(
                         '剩余额度 ${_amount(pack.remainAmount)} / ${_amount(pack.product.balance)}',
                         style: const TextStyle(
-                          color: Color(0xFF6E6E73),
+                          color: AppColors.secondaryLabel,
                           fontSize: 12,
                         ),
                       ),
@@ -97,7 +98,7 @@ class _PackRow extends StatelessWidget {
                       Text(
                         '有效期至 ${formatDate(pack.expireAt!)}',
                         style: const TextStyle(
-                          color: Color(0xFF6E6E73),
+                          color: AppColors.secondaryLabel,
                           fontSize: 12,
                         ),
                       ),
@@ -127,11 +128,11 @@ class _UsageBar extends StatelessWidget {
       borderRadius: BorderRadius.circular(3),
       child: Container(
         height: 6,
-        color: const Color(0xFFE8F2FF),
+        color: AppColors.blueChipBackground,
         child: FractionallySizedBox(
           alignment: Alignment.centerLeft,
           widthFactor: fraction.toDouble(),
-          child: Container(color: const Color(0xFF007AFF)),
+          child: Container(color: AppColors.blue),
         ),
       ),
     );
@@ -143,7 +144,7 @@ class _Divider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(height: 1, color: const Color(0xFFF2F2F7));
+    return Container(height: 1, color: AppColors.hoverBackground);
   }
 }
 
@@ -166,8 +167,8 @@ class _EmptySubscription extends StatelessWidget {
         children: [
           SummaryIcon(
             icon: CupertinoIcons.tray,
-            color: Color(0xFF8E8E93),
-            background: Color(0xFFF2F2F7),
+            color: AppColors.tertiaryLabel,
+            background: AppColors.hoverBackground,
           ),
           SizedBox(width: 12),
           Expanded(
@@ -181,7 +182,10 @@ class _EmptySubscription extends StatelessWidget {
                 SizedBox(height: 3),
                 Text(
                   '购买套餐后会在这里显示。',
-                  style: TextStyle(color: Color(0xFF6E6E73), fontSize: 12),
+                  style: TextStyle(
+                    color: AppColors.secondaryLabel,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),

@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=MirrorStages Desktop
-Comment=MirrorStages 桌面控制面板
+Name=Mirrorstages
+Comment=Mirrorstages 客户端
 Exec=mirrorstages-desktop
 Icon=mirrorstages-desktop
 Terminal=false

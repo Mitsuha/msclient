@@ -30,8 +30,7 @@ class ClaudeConfigManager implements ToolConfigManager {
   Future<String> directoryPath() async => '${await _home.resolve()}/.claude';
 
   @override
-  Future<bool> isInstalled() async =>
-      Directory(await directoryPath()).exists();
+  Future<bool> isInstalled() async => Directory(await directoryPath()).exists();
 
   Future<String> _credentialsFilePath() async =>
       '${await directoryPath()}/.credentials.json';
@@ -180,7 +179,8 @@ class ClaudeConfigManager implements ToolConfigManager {
 
   /// The current `settings.json` as a mutable map; a missing or malformed file
   /// yields an empty map so the write can start from the defaults.
-  Future<Map<String, dynamic>> _readSettings(File file) => _readJsonObject(file);
+  Future<Map<String, dynamic>> _readSettings(File file) =>
+      _readJsonObject(file);
 
   /// Parses [file] as a JSON object, returning a mutable map. A missing or
   /// malformed file yields an empty map so a merging write can start clean.
@@ -336,7 +336,9 @@ class ClaudeConfigManager implements ToolConfigManager {
       return const ToolStatus.uninitialized();
     }
     final profile = await _readJsonObject(File(await _profileFilePath()));
-    return ToolStatus.initialized(claudeAccountFromProfile(profile, userPackId));
+    return ToolStatus.initialized(
+      claudeAccountFromProfile(profile, userPackId),
+    );
   }
 
   Future<String?> _readCredentials() async {
@@ -452,10 +454,17 @@ int? parseClaudeUserPackId(String credentialsJson) {
       return null;
     }
 
-    final content = accessToken
-        .substring(_accessTokenPrefix.length)
-        .split('-')
-        .first;
+    // The content segment is URL-safe base64 whose alphabet itself contains
+    // '-', the same character that separates it from the trailing signature —
+    // so splitting on '-' would truncate some tokens. Instead decode the whole
+    // remainder (trimmed to a whole number of base64 quads): base64 is
+    // positional, and only the leading bytes up to the 3rd '|' are read, so
+    // the mis-decoded signature tail is harmless.
+    final remainder = accessToken.substring(_accessTokenPrefix.length);
+    final content = remainder.substring(
+      0,
+      remainder.length - remainder.length % 4,
+    );
     final bytes = base64Url.decode(base64Url.normalize(content));
     const pipe = 0x7c; // '|'
     final pipes = <int>[];
@@ -486,7 +495,9 @@ ToolAccount claudeAccountFromProfile(
   int userPackId,
 ) {
   final oauthAccount = profile['oauthAccount'];
-  final account = oauthAccount is Map ? oauthAccount : const <String, dynamic>{};
+  final account = oauthAccount is Map
+      ? oauthAccount
+      : const <String, dynamic>{};
   final email = account['emailAddress']?.toString() ?? '';
   final displayName = account['displayName']?.toString() ?? '';
   return ToolAccount(

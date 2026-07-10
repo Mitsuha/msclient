@@ -6,6 +6,7 @@ import 'package:desktop/features/auth/login_overlay.dart';
 import 'package:desktop/features/dashboard/dashboard_page.dart';
 import 'package:desktop/features/settings/settings_page.dart';
 import 'package:desktop/features/shell/app_sidebar.dart';
+import 'package:desktop/ui/app_colors.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -13,7 +14,9 @@ import 'package:window_manager/window_manager.dart';
 /// The main window: sidebar, section switching, login overlay, and the
 /// Windows title bar.
 class AppShell extends StatelessWidget {
-  const AppShell({super.key});
+  const AppShell({super.key, required this.onExit});
+
+  final VoidCallback onExit;
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +78,7 @@ class AppShell extends StatelessWidget {
             isLoading: viewModel.isLoggingIn,
             errorMessage: viewModel.loginErrorMessage,
             onLogin: viewModel.login,
-            onExit: windowManager.destroy,
+            onExit: onExit,
           ),
       ],
     );
@@ -109,8 +112,10 @@ class _WindowsTitleBar extends StatelessWidget {
                 width: 190,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: Color(0xFFF4F4F6),
-                    border: Border(right: BorderSide(color: Color(0xFFD7D7DB))),
+                    color: AppColors.sidebarBackground,
+                    border: Border(
+                      right: BorderSide(color: AppColors.strongBorder),
+                    ),
                   ),
                 ),
               ),
@@ -118,7 +123,7 @@ class _WindowsTitleBar extends StatelessWidget {
             ],
           ),
           WindowCaption(
-            backgroundColor: Color(0x00000000),
+            backgroundColor: AppColors.transparent,
             brightness: Brightness.light,
           ),
         ],

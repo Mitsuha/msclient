@@ -31,12 +31,10 @@ class CodexConfigManager implements ToolConfigManager {
   Future<String> directoryPath() async => '${await _home.resolve()}/.codex';
 
   @override
-  Future<bool> isInstalled() async =>
-      Directory(await directoryPath()).exists();
+  Future<bool> isInstalled() async => Directory(await directoryPath()).exists();
 
-  Future<bool> hasRestorableBackup() async => CodexConfigBackup(
-    Directory(await directoryPath()),
-  ).hasRestorableBackup();
+  Future<bool> hasRestorableBackup() async =>
+      CodexConfigBackup(Directory(await directoryPath())).hasRestorableBackup();
 
   /// Reports the Codex initialization state. Codex counts as initialized only
   /// when all three checks pass:
