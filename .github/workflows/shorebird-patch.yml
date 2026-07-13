@@ -1,0 +1,92 @@
+name: Shorebird Patch
+
+"on":
+  push:
+    tags:
+      - 'v*-patch.*'
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v7
+
+      - name: Validate patch tag
+        id: resolve
+        shell: bash
+        run: bash tool/ci/resolve_tag.sh patch "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
+  windows:
+    name: Patch Windows
+    needs: prepare
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v7
+
+      - name: Set up Shorebird
+        uses: shorebirdtech/setup-shorebird@v1
+        with:
+          cache: true
+
+      - name: Publish stable patch
+        shell: bash
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: shorebird patch --platforms=windows --release-version="$VERSION" --track=stable
+
+  linux:
+    name: Patch Linux
+    needs: prepare
+    runs-on: ubuntu-22.04
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v7
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libstdc++-12-dev \
+            libayatana-appindicator3-dev
+
+      - name: Set up Shorebird
+        uses: shorebirdtech/setup-shorebird@v1
+        with:
+          cache: true
+
+      - name: Publish stable patch
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: shorebird patch --platforms=linux --release-version="$VERSION" --track=stable
+
+  macos:
+    name: Patch macOS
+    needs: prepare
+    runs-on: macos-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v7
+
+      - name: Set up Shorebird
+        uses: shorebirdtech/setup-shorebird@v1
+        with:
+          cache: true
+
+      - name: Publish stable patch
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: shorebird patch --platforms=macos --release-version="$VERSION" --track=stable

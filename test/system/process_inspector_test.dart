@@ -16,10 +16,13 @@ void main() {
     });
 
     test('parses a tasklist.exe style row', () {
-      expect(
-        parseCsvRow('"cc-switch.exe","1234","Console","1","10,000 K"'),
-        ['cc-switch.exe', '1234', 'Console', '1', '10,000 K'],
-      );
+      expect(parseCsvRow('"cc-switch.exe","1234","Console","1","10,000 K"'), [
+        'cc-switch.exe',
+        '1234',
+        'Console',
+        '1',
+        '10,000 K',
+      ]);
     });
 
     test('returns a single empty column for an empty row', () {

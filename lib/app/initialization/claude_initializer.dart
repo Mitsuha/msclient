@@ -30,8 +30,7 @@ ToolInitializer claudeInitializer({
     InitStep(
       id: ClaudeInitSteps.proxySettings,
       title: '代理设置',
-      description:
-          '通过 Mirrorstages 来确保一致的网络环境。',
+      description: '通过 Mirrorstages 来确保一致的网络环境。',
       check: config.hasProxySettings,
       apply: () async => config.writeProxySettings(await resolveProxyUrl()),
     ),

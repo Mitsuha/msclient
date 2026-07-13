@@ -1,112 +1,126 @@
-# CI/CD 部署手册（GitHub Actions + Shorebird）
+# CI/CD 操作手册
 
-本项目用 **GitHub Actions** 做跨平台自动编译打包，用 **Shorebird** 做 release 与
-后续热更新（patch）。macOS 上无法本地编译 Windows/Linux，交给 CI 的原生 runner 解决。
+本项目使用 GitHub Actions 和 Shorebird 为 Windows、Linux、macOS 发布正式版本与 Dart 热更新。
 
-## 一、两个工作流的职责
+## 触发规则
 
-| 文件 | 触发 | 做什么 | 是否用 Shorebird |
-|---|---|---|---|
-| `.github/workflows/ci.yml` | 每次 push / PR 到 `master` | 三端原生 `flutter build` + `analyze` + `test`，只验证能编译能过测 | 否（不消耗 release 额度） |
-| `.github/workflows/release.yml` | 推送 `v*` tag 或手动 | `shorebird release` 三端 → 打成安装包 → 发到 GitHub Release | 是 |
+普通分支 push、`master` push 和 Pull Request 均不触发 GitHub Actions。只有以下两类 tag 会启动 workflow：
 
-> 为什么分两个：Shorebird 每个版本号只能 release 一次，不适合“每次提交都 release”。
-> 所以日常提交走 `ci.yml`（只编译验证），正式发版才打 tag 走 `release.yml`。
+| 操作 | Tag 格式 | 示例 |
+|---|---|---|
+| Shorebird release | `v<major>.<minor>.<patch>+<build>` | `v1.2.3+45` |
+| Shorebird patch | `v<目标release版本>-patch.<序号>` | `v1.2.3+45-patch.1` |
 
-## 二、产物清单
+workflow 会严格校验 tag 和 `pubspec.yaml`，不能只依赖 tag 名相似。
 
-`release.yml` 会在 GitHub Release 里附带：
+## 一次性配置
 
-- **Windows**：`...-windows-x64-setup.exe`（Inno Setup 安装程序）、`...-windows-x64.zip`（免安装）
-- **Linux**：`...-x86_64.AppImage`、`mirrorstages-desktop_<ver>_amd64.deb`、`...-linux-x64.tar.gz`
-- **macOS**：`...-macos.dmg`
+### Shorebird API key
 
-## 三、一次性准备（本地，只做一次）
+在 [Shorebird Console](https://console.shorebird.dev) 的 **Account → API Keys** 创建 API key，然后在 GitHub 仓库的 **Settings → Secrets and variables → Actions** 中新增：
 
-### 1. 登录并初始化 Shorebird
-
-当前项目还**没有** `shorebird.yaml`，需要先初始化（会在 Shorebird 服务端注册这个 app，
-生成带 `app_id` 的 `shorebird.yaml`，并自动把它加入 `pubspec.yaml` 的 assets）：
-
-```sh
-shorebird login          # 浏览器登录 Shorebird 账号
-shorebird init           # 生成 shorebird.yaml，写入 app_id
-git add shorebird.yaml pubspec.yaml
-git commit -m "chore: init shorebird"
+```text
+Name: SHOREBIRD_TOKEN
+Value: sb_api_...
 ```
 
-> `shorebird.yaml` 必须提交进仓库，CI 才能用它做 release。
+`SHOREBIRD_TOKEN` 是密钥，不能提交到仓库。`shorebird login:ci` 已废弃，应使用 Console 创建的 API key。详情见 [Shorebird GitHub Integration](https://docs.shorebird.dev/code-push/ci/github/)。
 
-### 2. 生成 CI 用的 API Key
+### 本地 pre-commit
 
-`shorebird login:ci` 已废弃，改用控制台 API Key：
-
-1. 打开 https://console.shorebird.dev → **Account → API Keys → Create API Key**
-2. 名称填 `GitHub Actions`，选好有效期和权限，点创建
-3. **立刻复制**那串 `sb_api_...`（只显示这一次，关掉就再也看不到）
-
-### 3. 建一个 GitHub 仓库专门跑 CI
-
-你的 `origin` 是 `https://cnb.cool/mirrorstages/desktop`，GitHub Actions 跑不了。
-再加一个 GitHub 远程即可，两边并存、互不影响：
+当前 checkout 的 `.git/hooks/pre-commit` 会在每次 commit 前执行：
 
 ```sh
-# 方式 A：已装 gh CLI
-gh repo create mirrorstages/desktop --private --source=. --remote=github --push
-
-# 方式 B：先在 github.com 网页手动建空仓库，再：
-git remote add github https://github.com/<你的账号>/<仓库名>.git
-git push github master
+dart format --output=none --set-exit-if-changed .
+flutter analyze
 ```
 
-以后要触发 CI，就把代码推到 `github` 这个远程（`git push github master`）。
+hook 不修改文件，只在检查失败时阻止 commit。它只对当前 checkout 生效，也可以被 `git commit --no-verify` 绕过。GitHub Actions 不重复 format、analyze 或 test。
 
-### 4. 在 GitHub 仓库配置 Secret
+## 发布正式版本
 
-GitHub 仓库 → **Settings → Secrets and variables → Actions → New repository secret**：
+先把 `pubspec.yaml` 的完整版本设置为要发布的版本：
 
-- Name：`SHOREBIRD_TOKEN`
-- Secret：第 2 步复制的 `sb_api_...`
+```yaml
+version: 1.2.3+45
+```
 
-这是 `release.yml` 唯一需要的密钥。CI 里 Shorebird CLI 检测到该变量会自动认证。
-
-## 四、发布一个正式版本
+然后创建并推送完全对应的 tag：
 
 ```sh
-# 1. 更新版本号（pubspec.yaml 的 version 字段，可选但推荐）
-#    version: 1.0.1+2
-
-# 2. 打 tag 并推到 GitHub，触发 release.yml
-git tag v1.0.1
-git push github v1.0.1
+git tag v1.2.3+45
+git push github v1.2.3+45
 ```
 
-几分钟后到 GitHub 仓库的 **Releases** 页就能看到三端安装包。
-也可以在 **Actions** 页用 “Run workflow” 手动触发（需手填版本号）。
+tag 中不能省略 `+build`，且去掉前导 `v` 后必须和 `pubspec.yaml` 完全一致。
 
-> tag 名去掉 `v` 就是 Shorebird 的版本号。同一个版本号不能 release 两次，
-> 每次发版记得递增。
+release workflow 会用 Flutter `3.44.2` 并行执行三个 Shorebird release，然后上传以下 GitHub Actions artifacts：
 
-## 五、之后的热更新（patch）
+- Windows：`MirrorStages-Desktop-1.2.3+45-windows-x64.msi`
+- Linux：`mirrorstages-desktop_1.2.3+45_amd64.deb`
+- macOS：`MirrorStages-Desktop-1.2.3+45-macos.dmg`
 
-改了 Dart 代码但没动原生部分时，可以不重新发安装包，直接推补丁：
+artifact 保留 7 天。本流程不会创建 GitHub Release，也不会生成其他安装包格式。
+
+### MSI 版本映射
+
+Windows Installer 只比较三段 `major.minor.build`。项目按以下规则生成 MSI ProductVersion：
+
+```text
+pubspec/Shorebird 1.2.3+45 -> MSI 1.2.45
+```
+
+major、minor 来自 pubspec；MSI 第三段使用 Flutter build number。因此：
+
+- major、minor 不得超过 255。
+- build number 不得超过 65535。
+- 同一 major/minor 下，每次正式 release 的 build number 必须单调递增。
+
+artifact 文件名和 Shorebird 版本仍使用完整的 `1.2.3+45`。
+
+## 发布 patch
+
+patch 只能用于 Shorebird 支持的 Dart 代码变更。不要在 patch 中加入原生代码、资源、字体或构建配置变更；这类变更必须发布新的 release。
+
+从目标 release 对应的代码准备修复，并保持 `pubspec.yaml` 版本不变：
+
+```yaml
+version: 1.2.3+45
+```
+
+为第一个补丁创建 tag：
 
 ```sh
-shorebird patch --platforms=windows,linux,macos --release-version=1.0.1+2
+git tag v1.2.3+45-patch.1
+git push github v1.2.3+45-patch.1
 ```
 
-（也可以把它做成第三个 workflow，需要时再加。）
+后续补丁依次使用 `.2`、`.3`。必须等待前一个 patch workflow 完成后再推送下一个 tag。
 
-## 六、注意事项 / 已知限制
+patch workflow 会显式指定 `--release-version=1.2.3+45`，不会使用 `latest`，并直接发布到 Shorebird `stable`。tag 推送后没有 staging 或人工审批环节。
 
-- **未签名**：Windows 安装包未做代码签名，首次运行会有 SmartScreen 提示；
-  macOS 的 `.dmg` 未签名未公证，用户需右键“打开”或在“隐私与安全性”里放行。
-  如需正式签名/公证，要额外准备证书并在 workflow 里加签名步骤。
-- **Linux 兼容性**：CI 用 `ubuntu-22.04`（glibc 2.35）构建，能覆盖大多数较新发行版；
-  更老的系统可能需要更低版本的构建环境。
-- **托盘依赖**：Linux 运行需要 `libayatana-appindicator3-1`（deb 包已声明依赖，
-  AppImage/tar 需用户自行安装）。
-- **图标**：安装包图标来自 `assets/tray/app_icon.ico`，Linux/macOS 会在 CI 里转成 PNG。
-  想换更精致的图标，替换该文件即可。
-- **cnb.cool**：本手册只配置了 GitHub。若还想在 cnb.cool 上跑原生 CI，
-  它用的是 `.cnb.yml`（与 GitHub Actions 不通用），需要另配。
+## 失败处理
+
+- tag 或 pubspec 校验失败：修正版本后创建新 tag；不要复用错误 tag。
+- 单个平台失败：在 GitHub Actions 中选择 **Re-run failed jobs**，只重跑失败平台。
+- patch 检测到 native 或 asset diff：停止 patch，改为递增 pubspec 版本并发布新 release。
+- 已成功的平台不会因另一平台失败而自动回滚。
+
+## 本地打包入口
+
+`packaging/` 是唯一打包实现。Makefile 和 workflow 是互不依赖的两个入口，都直接调用 `packaging/<platform>/`：
+
+```sh
+make package-windows
+make package-linux
+make package-macos
+```
+
+这些命令只负责把已经生成的 Shorebird/Flutter bundle 打成 MSI、DEB 或 DMG，不执行 Shorebird release。
+
+## 参考资料
+
+- [Shorebird Development Workflow](https://docs.shorebird.dev/code-push/guides/development-workflow/)
+- [Shorebird GitHub Integration](https://docs.shorebird.dev/code-push/ci/github/)
+- [Shorebird Create a Release](https://docs.shorebird.dev/code-push/release/)
+- [Shorebird Create a Patch](https://docs.shorebird.dev/code-push/patch/)

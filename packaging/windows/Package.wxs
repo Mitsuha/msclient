@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="Mirrorstages"
+    Manufacturer="MirrorStages"
+    Version="$(MsiVersion)"
+    UpgradeCode="B3D9E2A1-7C4F-4E6A-9F2D-1A8C5E0B6D34"
+    Scope="perMachine">
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Mirrorstages" />
+    </StandardDirectory>
+
+    <Files Include="$(SourceDir)\**" Directory="INSTALLFOLDER" />
+  </Package>
+</Wix>

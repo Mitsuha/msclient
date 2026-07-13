@@ -1,21 +1,34 @@
-PROTOC_GEN_DART := $(HOME)/.pub-cache/bin/protoc-gen-dart
-PROTO := proxy.proto
+VERSION ?= $(shell sed -n 's/^version:[[:space:]]*//p' pubspec.yaml)
+MSI_VERSION ?= $(shell printf '%s\n' "$(VERSION)" | sed -E 's/^([0-9]+)\.([0-9]+)\.[0-9]+\+([0-9]+)$$/\1.\2.\3/')
+OUT_DIR ?= dist
 
-.PHONY: proto proxy-test flutter-test test
+WINDOWS_BUNDLE ?= build/windows/x64/runner/Release
+LINUX_BUNDLE ?= build/linux/x64/release/bundle
+MACOS_APP ?= build/macos/Build/Products/Release/Mirrorstages.app
+APP_ICON ?= assets/icon/app_icon_256.png
 
-proto:
-	protoc \
-		-I protocol \
-		--go_out=proxy/internal/protocol --go_opt=paths=source_relative \
-		--go-grpc_out=proxy/internal/protocol --go-grpc_opt=paths=source_relative \
-		--plugin=protoc-gen-dart=$(PROTOC_GEN_DART) \
-		--dart_out=grpc:lib/generated/protocol \
-		$(PROTO)
+.PHONY: package-windows package-linux package-macos windows linux macos
 
-proxy-test:
-	cd proxy && go test ./...
+package-windows:
+	pwsh -File packaging/windows/build-msi.ps1 \
+		-Version "$(VERSION)" \
+		-MsiVersion "$(MSI_VERSION)" \
+		-SourceDir "$(WINDOWS_BUNDLE)" \
+		-OutDir "$(OUT_DIR)"
 
-flutter-test:
-	flutter test
+package-linux:
+	bash packaging/linux/build-deb.sh \
+		"$(VERSION)" \
+		"$(LINUX_BUNDLE)" \
+		"$(APP_ICON)" \
+		"$(OUT_DIR)"
 
-test: proxy-test flutter-test
+package-macos:
+	bash packaging/macos/build-dmg.sh \
+		"$(VERSION)" \
+		"$(MACOS_APP)" \
+		"$(OUT_DIR)"
+
+windows: package-windows
+linux: package-linux
+macos: package-macos

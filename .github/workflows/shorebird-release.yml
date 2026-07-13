@@ -1,0 +1,153 @@
+name: Shorebird Release
+
+"on":
+  push:
+    tags:
+      - 'v*'
+      - '!v*-patch.*'
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: '3.44.2'
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      msi_version: ${{ steps.resolve.outputs.msi_version }}
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v7
+
+      - name: Validate release tag
+        id: resolve
+        shell: bash
+        run: bash tool/ci/resolve_tag.sh release "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
+  windows:
+    name: Release Windows
+    needs: prepare
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      MSI_VERSION: ${{ needs.prepare.outputs.msi_version }}
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v7
+
+      - name: Set up Shorebird
+        uses: shorebirdtech/setup-shorebird@v1
+        with:
+          cache: true
+
+      - name: Create Shorebird release
+        shell: bash
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: shorebird release --platforms=windows --flutter-version="$FLUTTER_VERSION"
+
+      - name: Install WiX Toolset
+        shell: pwsh
+        run: dotnet tool install --global wix --version 5.0.2
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          & ./packaging/windows/build-msi.ps1 `
+            -Version $env:VERSION `
+            -MsiVersion $env:MSI_VERSION `
+            -SourceDir build/windows/x64/runner/Release `
+            -OutDir dist
+
+      - name: Upload MSI
+        uses: actions/upload-artifact@v7
+        with:
+          name: MirrorStages-Desktop-${{ env.VERSION }}-windows-x64
+          path: dist/MirrorStages-Desktop-${{ env.VERSION }}-windows-x64.msi
+          if-no-files-found: error
+          retention-days: 7
+
+  linux:
+    name: Release Linux
+    needs: prepare
+    runs-on: ubuntu-22.04
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v7
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libstdc++-12-dev \
+            libayatana-appindicator3-dev
+
+      - name: Set up Shorebird
+        uses: shorebirdtech/setup-shorebird@v1
+        with:
+          cache: true
+
+      - name: Create Shorebird release
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: shorebird release --platforms=linux --flutter-version="$FLUTTER_VERSION"
+
+      - name: Build DEB
+        run: |
+          bash packaging/linux/build-deb.sh \
+            "$VERSION" \
+            build/linux/x64/release/bundle \
+            assets/icon/app_icon_256.png \
+            dist
+
+      - name: Upload DEB
+        uses: actions/upload-artifact@v7
+        with:
+          name: MirrorStages-Desktop-${{ env.VERSION }}-linux-amd64
+          path: dist/mirrorstages-desktop_${{ env.VERSION }}_amd64.deb
+          if-no-files-found: error
+          retention-days: 7
+
+  macos:
+    name: Release macOS
+    needs: prepare
+    runs-on: macos-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v7
+
+      - name: Set up Shorebird
+        uses: shorebirdtech/setup-shorebird@v1
+        with:
+          cache: true
+
+      - name: Create Shorebird release
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: shorebird release --platforms=macos --flutter-version="$FLUTTER_VERSION"
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Build DMG
+        run: |
+          bash packaging/macos/build-dmg.sh \
+            "$VERSION" \
+            build/macos/Build/Products/Release/Mirrorstages.app \
+            dist
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v7
+        with:
+          name: MirrorStages-Desktop-${{ env.VERSION }}-macos
+          path: dist/MirrorStages-Desktop-${{ env.VERSION }}-macos.dmg
+          if-no-files-found: error
+          retention-days: 7

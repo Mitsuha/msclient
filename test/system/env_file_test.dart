@@ -8,9 +8,7 @@ void main() {
     });
 
     test('skips comments, blank lines, and lines without =', () {
-      expect(parseEnvLines(['# comment', '', 'not-a-pair', 'a=1']), {
-        'a': '1',
-      });
+      expect(parseEnvLines(['# comment', '', 'not-a-pair', 'a=1']), {'a': '1'});
     });
 
     test('trims whitespace and strips matching quotes', () {

@@ -24,7 +24,16 @@ String _credentials({
   final raw = utf8.encode('$userId|$memberId|$packId|');
   // 8 bytes that are deliberately not valid UTF-8, to prove the parser reads
   // the pack id without decoding the padding tail.
-  final padding = Uint8List.fromList(const [0xff, 0xfe, 0x80, 0x00, 1, 2, 3, 4]);
+  final padding = Uint8List.fromList(const [
+    0xff,
+    0xfe,
+    0x80,
+    0x00,
+    1,
+    2,
+    3,
+    4,
+  ]);
   final content = _rawUrlB64([...raw, ...padding]);
   return jsonEncode({
     'claudeAiOauth': {'accessToken': '$prefix$content-abc123-def456'},
@@ -163,29 +172,39 @@ void main() {
       });
     });
 
-    test('keeps every key outside env, pins defaults only when absent',
-        () async {
-      await settingsFile().parent.create(recursive: true);
-      await settingsFile().writeAsString(
-        jsonEncode({
-          'theme': 'dark',
-          'permissions': {
-            'allow': ['Bash'],
-          },
-          'env': {'FOO': 'bar'},
-        }),
-      );
+    test(
+      'keeps every key outside env, pins defaults only when absent',
+      () async {
+        await settingsFile().parent.create(recursive: true);
+        await settingsFile().writeAsString(
+          jsonEncode({
+            'theme': 'dark',
+            'permissions': {
+              'allow': ['Bash'],
+            },
+            'env': {'FOO': 'bar'},
+          }),
+        );
 
-      await config.writeProxySettings('http://127.0.0.1:18610');
+        await config.writeProxySettings('http://127.0.0.1:18610');
 
-      final settings = await readSettings();
-      expect(settings['theme'], 'dark', reason: 'existing value is not pinned');
-      expect(settings['permissions'], {
-        'allow': ['Bash'],
-      });
-      expect(settings['model'], 'opus[1m]', reason: 'absent default is pinned');
-      expect((settings['env'] as Map).containsKey('FOO'), isFalse);
-    });
+        final settings = await readSettings();
+        expect(
+          settings['theme'],
+          'dark',
+          reason: 'existing value is not pinned',
+        );
+        expect(settings['permissions'], {
+          'allow': ['Bash'],
+        });
+        expect(
+          settings['model'],
+          'opus[1m]',
+          reason: 'absent default is pinned',
+        );
+        expect((settings['env'] as Map).containsKey('FOO'), isFalse);
+      },
+    );
 
     test('creates the file from scratch when missing', () async {
       await config.writeProxySettings('http://127.0.0.1:18610');
