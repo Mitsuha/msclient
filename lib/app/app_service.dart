@@ -10,6 +10,7 @@ import 'package:desktop/app/models/account_summary.dart';
 import 'package:desktop/app/models/app_snapshot.dart';
 import 'package:desktop/app/models/local_status.dart';
 import 'package:desktop/core/api/api_client.dart';
+import 'package:desktop/core/logging/app_logger.dart';
 import 'package:desktop/data/api/auth_api.dart';
 import 'package:desktop/data/api/dashboard_api.dart';
 import 'package:desktop/data/api/desktop_config_api.dart';
@@ -51,7 +52,7 @@ class AppService {
   });
 
   /// Wires the service against the production endpoints in [AppConfig].
-  factory AppService.production() {
+  factory AppService.production({required AppLogger logger}) {
     final client = ApiClient(baseUri: AppConfig.apiBaseUri);
     final home = HomeDirectory();
     return AppService(
@@ -72,10 +73,11 @@ class AppService {
       claudeConfig: ClaudeConfigManager(home: home),
       browser: const ExternalBrowser(),
       gost: GostController(
-        binary: GostBinary(home: home),
+        binary: GostBinary(home: home, logger: logger),
         process: GostProcess(),
         api: GostApiClient(baseUri: AppConfig.gostApiBaseUri),
         home: home,
+        logger: logger,
       ),
     );
   }

@@ -1,7 +1,19 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:desktop/app/app_config.dart';
 import 'package:desktop/system/codex_config_manager.dart';
+import 'package:desktop/system/home_directory.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+class _FakeHome extends HomeDirectory {
+  _FakeHome(this.path);
+
+  final String path;
+
+  @override
+  Future<String> resolve() async => path;
+}
 
 /// Builds an unsigned JWT whose payload is [payload].
 String _jwt(Map<String, dynamic> payload) {
@@ -11,12 +23,44 @@ String _jwt(Map<String, dynamic> payload) {
 }
 
 /// Builds an `auth.json` string whose access token payload is [claims].
-String _authJson(Map<String, dynamic> claims) =>
-    jsonEncode({
-      'tokens': {'access_token': _jwt(claims)},
-    });
+String _authJson(Map<String, dynamic> claims) => jsonEncode({
+  'tokens': {'access_token': _jwt(claims)},
+});
 
 void main() {
+  group('CodexConfigManager.hasProxyEnv', () {
+    late Directory home;
+    late CodexConfigManager manager;
+
+    setUp(() async {
+      home = await Directory.systemTemp.createTemp('codex-config-test-');
+      manager = CodexConfigManager(home: _FakeHome(home.path));
+      await Directory('${home.path}/.codex').create();
+    });
+
+    tearDown(() async {
+      await home.delete(recursive: true);
+    });
+
+    test('passes when both proxies point at the local gost proxy', () async {
+      await File('${home.path}/.codex/.env').writeAsString(
+        'http_proxy=${AppConfig.gostLocalProxyUrl}\n'
+        'https_proxy=${AppConfig.gostLocalProxyUrl}\n',
+      );
+
+      expect(await manager.hasProxyEnv(), isTrue);
+    });
+
+    test('fails when non-empty proxies do not point at local gost', () async {
+      await File('${home.path}/.codex/.env').writeAsString(
+        'http_proxy=http://other-proxy:8080\n'
+        'https_proxy=http://other-proxy:8080\n',
+      );
+
+      expect(await manager.hasProxyEnv(), isFalse);
+    });
+  });
+
   group('codexAuthGrantsMirrorStages', () {
     test('passes when both grant claims are present', () {
       expect(

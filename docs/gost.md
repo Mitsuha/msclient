@@ -27,6 +27,11 @@ CLI 工具 ──http──▶ 127.0.0.1:18610 ──┤
   `~/.mstages/gost.log`。选用**用户主目录**是因为 macOS 的 `.app` 包已签名、只读，
   无法把二进制写进包内。
 - 下载先落到 `*.download` 临时文件，校验大小后原子重命名，Unix 上再 `chmod +x`。
+- 应用侧的下载和启动诊断日志写入
+  `~/.mstages/logs/app-YYYY-MM-DD.log`，按本地日期轮转并保留最近 7 天；
+  `gost.log` 仍只记录 gost 子进程自身的 stdout/stderr。诊断事件包括
+  `gost.download.started`、`gost.download.http_failed`、
+  `gost.download.write_failed` 和 `gost.start.failed`。
 
 ## 生命周期
 
@@ -67,6 +72,8 @@ Codex / Claude Code 的请求全部经本地 gost 转发，因此「正在运行
 ```
 lib/system/gost_binary.dart    选平台资产、首次下载、chmod（本机 IO）
 lib/system/gost_process.dart   Process.start / kill，输出转存日志
+lib/core/logging/app_logger.dart  通用结构化日志接口
+lib/system/file_app_logger.dart  按天写入应用日志、保留最近 7 天
 lib/data/api/gost_api.dart     gost 控制 API 客户端（HTTP，前缀是 /config 不是 /api/config）
 lib/app/gost/gost_controller.dart  编排三者：下载→拉起→配置 chain/service
 ```

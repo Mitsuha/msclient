@@ -1,19 +1,21 @@
 import 'dart:io';
 
 import 'package:desktop/app/app_config.dart';
+import 'package:desktop/core/logging/app_logger.dart';
 import 'package:desktop/system/home_directory.dart';
-import 'package:flutter/foundation.dart';
 
 /// Resolves — and on first run downloads — the platform-specific `go-gost`
 /// binary under `~/.mstages/bin`.
 class GostBinary {
   GostBinary({
     required this._home,
+    required this._logger,
     this.downloadBaseUrl = AppConfig.gostDownloadBaseUrl,
     HttpClient Function()? httpClientFactory,
   }) : _httpClientFactory = httpClientFactory ?? HttpClient.new;
 
   final HomeDirectory _home;
+  final AppLogger _logger;
   final String downloadBaseUrl;
   final HttpClient Function() _httpClientFactory;
 
@@ -53,48 +55,182 @@ class GostBinary {
     if (await target.exists()) {
       return target.path;
     }
-    await target.parent.create(recursive: true);
     await _download('$downloadBaseUrl/$assetName', target);
     return target.path;
   }
 
   Future<void> _download(String url, File target) async {
     final temp = File('${target.path}.download');
-    final client = _httpClientFactory();
+    final uri = Uri.parse(url);
+    final baseContext = <String, Object?>{
+      'platform': Platform.operatingSystem,
+      'asset': assetName,
+      'url': url,
+      'targetPath': target.path,
+    };
+    await _logger.info(
+      'gost.download.started',
+      'Starting gost download',
+      context: baseContext,
+    );
+
     try {
-      final request = await client.getUrl(Uri.parse(url));
-      final response = await request.close();
-      if (response.statusCode != HttpStatus.ok) {
-        throw HttpException(
-          'downloading gost failed: HTTP ${response.statusCode}',
-          uri: Uri.parse(url),
-        );
-      }
-      final sink = temp.openWrite();
+      await target.parent.create(recursive: true);
+    } catch (error, stackTrace) {
+      await _logWriteFailure(
+        error,
+        stackTrace,
+        baseContext,
+        stage: 'create_directory',
+      );
+      rethrow;
+    }
+
+    late HttpClient client;
+    try {
+      client = _httpClientFactory();
+    } catch (error, stackTrace) {
+      await _logger.error(
+        'gost.download.http_failed',
+        'Creating the gost download client failed',
+        error: error.toString(),
+        stackTrace: stackTrace,
+        context: baseContext,
+      );
+      rethrow;
+    }
+    late HttpClientResponse response;
+    try {
       try {
-        await response.pipe(sink);
-      } finally {
+        final request = await client.getUrl(uri);
+        response = await request.close();
+      } catch (error, stackTrace) {
+        await _logger.error(
+          'gost.download.http_failed',
+          'Gost download request failed',
+          error: error.toString(),
+          stackTrace: stackTrace,
+          context: baseContext,
+        );
+        rethrow;
+      }
+
+      if (response.statusCode != HttpStatus.ok) {
+        final error = HttpException(
+          'downloading gost failed: HTTP ${response.statusCode}',
+          uri: uri,
+        );
+        await _logger.error(
+          'gost.download.http_failed',
+          'Gost download returned a non-success status',
+          error: error.toString(),
+          stackTrace: StackTrace.current,
+          context: {...baseContext, 'statusCode': response.statusCode},
+        );
+        throw error;
+      }
+
+      IOSink sink;
+      try {
+        sink = temp.openWrite();
+      } catch (error, stackTrace) {
+        await _logWriteFailure(
+          error,
+          stackTrace,
+          baseContext,
+          stage: 'write_temp',
+        );
+        rethrow;
+      }
+
+      try {
+        await for (final chunk in response) {
+          sink.add(chunk);
+        }
+      } catch (error, stackTrace) {
+        await _closeIgnoringErrors(sink);
+        await _logger.error(
+          'gost.download.http_failed',
+          'Gost response stream failed',
+          error: error.toString(),
+          stackTrace: stackTrace,
+          context: baseContext,
+        );
+        rethrow;
+      }
+
+      try {
+        await sink.flush();
         await sink.close();
+      } catch (error, stackTrace) {
+        await _closeIgnoringErrors(sink);
+        await _logWriteFailure(
+          error,
+          stackTrace,
+          baseContext,
+          stage: 'write_temp',
+        );
+        rethrow;
       }
     } finally {
       client.close(force: true);
     }
 
-    // Guard against a truncated download leaving an unusable binary in place.
-    if (await temp.length() < 1024 * 1024) {
-      await temp.delete();
-      throw HttpException(
-        'downloaded gost is too small to be valid',
-        uri: Uri.parse(url),
-      );
-    }
-
-    await temp.rename(target.path);
-    if (!Platform.isWindows) {
-      final result = await Process.run('chmod', ['+x', target.path]);
-      if (result.exitCode != 0) {
-        debugPrint('chmod +x on gost failed: ${result.stderr}');
+    var stage = 'validate_size';
+    try {
+      // Guard against a truncated download leaving an unusable binary in place.
+      if (await temp.length() < 1024 * 1024) {
+        throw HttpException(
+          'downloaded gost is too small to be valid',
+          uri: uri,
+        );
       }
+
+      stage = 'rename';
+      await temp.rename(target.path);
+      if (!Platform.isWindows) {
+        stage = 'chmod';
+        final result = await Process.run('chmod', ['+x', target.path]);
+        if (result.exitCode != 0) {
+          throw ProcessException(
+            'chmod',
+            ['+x', target.path],
+            result.stderr.toString(),
+            result.exitCode,
+          );
+        }
+      }
+    } catch (error, stackTrace) {
+      await _deleteIgnoringErrors(temp);
+      await _logWriteFailure(error, stackTrace, baseContext, stage: stage);
+      rethrow;
     }
+  }
+
+  Future<void> _logWriteFailure(
+    Object error,
+    StackTrace stackTrace,
+    Map<String, Object?> baseContext, {
+    required String stage,
+  }) => _logger.error(
+    'gost.download.write_failed',
+    'Writing the gost binary failed',
+    error: error.toString(),
+    stackTrace: stackTrace,
+    context: {...baseContext, 'stage': stage},
+  );
+
+  Future<void> _closeIgnoringErrors(IOSink sink) async {
+    try {
+      await sink.close();
+    } catch (_) {}
+  }
+
+  Future<void> _deleteIgnoringErrors(File file) async {
+    try {
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {}
   }
 }

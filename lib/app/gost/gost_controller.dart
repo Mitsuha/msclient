@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:desktop/app/app_config.dart';
+import 'package:desktop/core/logging/app_logger.dart';
 import 'package:desktop/data/api/gost_api.dart';
 import 'package:desktop/system/gost_binary.dart';
 import 'package:desktop/system/gost_process.dart';
 import 'package:desktop/system/home_directory.dart';
-import 'package:flutter/foundation.dart';
 
 /// Drives the local go-gost lifecycle: installs the binary, launches it with
 /// its control API, and points a single forwarding chain at the selected node.
@@ -20,6 +20,7 @@ class GostController {
     required this._process,
     required this._api,
     required this._home,
+    required this._logger,
     this.host = AppConfig.gostHost,
     this.apiPort = AppConfig.gostApiPort,
     this.proxyPort = AppConfig.gostProxyPort,
@@ -29,6 +30,7 @@ class GostController {
   final GostProcess _process;
   final GostApiClient _api;
   final HomeDirectory _home;
+  final AppLogger _logger;
   final String host;
   final int apiPort;
   final int proxyPort;
@@ -101,13 +103,18 @@ class GostController {
       if (desired != null) {
         await _applyNow(desired);
       }
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (_stopRequested) {
         return;
       }
       // Let a later start() retry from scratch (e.g. offline first-run download).
       _starting = null;
-      debugPrint('gost failed to start: $error');
+      await _logger.error(
+        'gost.start.failed',
+        'Gost failed to start',
+        error: error.toString(),
+        stackTrace: stackTrace,
+      );
       rethrow;
     }
   }

@@ -40,7 +40,7 @@ abstract final class AppConfig {
 
   /// The local proxy address written into every tool's config; constant across
   /// node switches (only gost's forwarding chain changes).
-  static String get gostLocalProxyUrl => 'http://$gostHost:$gostProxyPort';
+  static const String gostLocalProxyUrl = 'http://$gostHost:$gostProxyPort';
 
   /// Base URI of gost's control API (`/config`, `/config/chains`, …).
   static Uri get gostApiBaseUri => Uri.parse('http://$gostHost:$gostApiPort');

@@ -4,6 +4,8 @@ import 'dart:ui' show AppExitResponse;
 import 'package:desktop/app/app_service.dart';
 import 'package:desktop/app/app_view_model.dart';
 import 'package:desktop/features/shell/app_shell.dart';
+import 'package:desktop/system/file_app_logger.dart';
+import 'package:desktop/system/home_directory.dart';
 import 'package:desktop/system/window_tray.dart';
 import 'package:desktop/ui/app_colors.dart';
 import 'package:flutter/cupertino.dart';
@@ -40,7 +42,11 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
   @override
   void initState() {
     super.initState();
-    _viewModel = AppViewModel(service: AppService.production())..bootstrap();
+    final logger = FileAppLogger(home: HomeDirectory());
+    _viewModel = AppViewModel(
+      service: AppService.production(logger: logger),
+      logger: logger,
+    )..bootstrap();
     _lifecycleListener = AppLifecycleListener(
       onExitRequested: _handleExitRequested,
     );

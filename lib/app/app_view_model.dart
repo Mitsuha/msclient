@@ -5,14 +5,17 @@ import 'package:desktop/app/app_service.dart';
 import 'package:desktop/app/models/app_snapshot.dart';
 import 'package:desktop/app/models/nav_section.dart';
 import 'package:desktop/core/api/api_client.dart';
+import 'package:desktop/core/logging/app_logger.dart';
 import 'package:flutter/foundation.dart';
 
 class AppViewModel extends ChangeNotifier {
-  AppViewModel({required AppService service}) : this._(service);
+  AppViewModel({required AppService service, required AppLogger logger})
+    : this._(service, logger);
 
-  AppViewModel._(this._service);
+  AppViewModel._(this._service, this._logger);
 
   final AppService _service;
+  final AppLogger _logger;
 
   /// How often the snapshot is silently refreshed while signed in.
   static const _autoRefreshInterval = Duration(seconds: 30);
@@ -179,7 +182,14 @@ class AppViewModel extends ChangeNotifier {
       _startAutoRefresh();
     } on ApiException catch (error) {
       _loginErrorMessage = _loginMessageFor(error);
-    } catch (error) {
+    } catch (error, stackTrace) {
+      await _logger.error(
+        'auth.login.failed',
+        'Login failed unexpectedly',
+        error: error.toString(),
+        stackTrace: stackTrace,
+        context: {'account': account},
+      );
       _loginErrorMessage = '登录失败，请稍后重试。';
     } finally {
       _isLoggingIn = false;

@@ -1,4 +1,5 @@
 import 'package:desktop/app/gost/gost_controller.dart';
+import 'package:desktop/core/logging/app_logger.dart';
 import 'package:desktop/data/api/gost_api.dart';
 import 'package:desktop/system/gost_binary.dart';
 import 'package:desktop/system/gost_process.dart';
@@ -6,16 +7,26 @@ import 'package:desktop/system/home_directory.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
+import '../support/recording_app_logger.dart';
+
 class _FakeHome extends HomeDirectory {
   @override
   Future<String> resolve() async => '/fake-home';
 }
 
 class _FakeBinary extends GostBinary {
-  _FakeBinary() : super(home: _FakeHome());
+  _FakeBinary(AppLogger logger) : super(home: _FakeHome(), logger: logger);
+
+  Object? failure;
 
   @override
-  Future<String> ensureInstalled() async => '/fake-home/.mstages/bin/gost';
+  Future<String> ensureInstalled() async {
+    final error = failure;
+    if (error != null) {
+      throw error;
+    }
+    return '/fake-home/.mstages/bin/gost';
+  }
 }
 
 /// Shared state standing in for the gost process + control API pair.
@@ -107,20 +118,37 @@ void main() {
   ];
 
   late _FakeGost gost;
+  late _FakeBinary binary;
   late _FakeProcess process;
   late _FakeApi api;
+  late RecordingAppLogger logger;
   late GostController controller;
 
   setUp(() {
     gost = _FakeGost();
+    logger = RecordingAppLogger();
+    binary = _FakeBinary(logger);
     process = _FakeProcess(gost);
     api = _FakeApi(gost);
     controller = GostController(
-      binary: _FakeBinary(),
+      binary: binary,
       process: process,
       api: api,
       home: _FakeHome(),
+      logger: logger,
     );
+  });
+
+  test('records a startup failure and preserves the exception', () async {
+    final failure = StateError('sensitive response body');
+    binary.failure = failure;
+
+    await expectLater(controller.start(), throwsA(same(failure)));
+
+    expect(logger.entries, hasLength(1));
+    expect(logger.entries.single.event, 'gost.start.failed');
+    expect(logger.entries.single.error, failure.toString());
+    expect(logger.entries.single.stackTrace, isNotNull);
   });
 
   test('spawns gost and pushes config when nothing is running', () async {

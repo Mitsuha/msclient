@@ -4,6 +4,7 @@ import 'package:desktop/app/models/account_summary.dart';
 import 'package:desktop/app/models/app_snapshot.dart';
 import 'package:desktop/app/models/local_status.dart';
 import 'package:desktop/app/models/tool_status.dart';
+import 'package:desktop/core/api/api_client.dart';
 import 'package:desktop/data/models/account_models.dart';
 import 'package:desktop/data/models/dashboard_models.dart';
 import 'package:desktop/data/models/pack_models.dart';
@@ -12,11 +13,16 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'support/recording_app_logger.dart';
+
 void main() {
   testWidgets('shows running control panel state', (tester) async {
     await tester.pumpWidget(
       ChangeNotifierProvider(
-        create: (_) => AppViewModel(service: _FakeAppService())..bootstrap(),
+        create: (_) => AppViewModel(
+          service: _FakeAppService(),
+          logger: RecordingAppLogger(),
+        )..bootstrap(),
         child: CupertinoApp(home: AppShell(onExit: () {})),
       ),
     );
@@ -28,9 +34,43 @@ void main() {
     expect(find.text('mirrorstages@example.com'), findsWidgets);
     expect(find.text('Professional Monthly'), findsOneWidget);
   });
+
+  test('logs unexpected login errors with their stack trace', () async {
+    final logger = RecordingAppLogger();
+    final service = _FakeAppService(loginError: StateError('network down'));
+    final viewModel = AppViewModel(service: service, logger: logger);
+
+    await viewModel.login(account: 'user@example.com', password: 'secret');
+
+    expect(logger.entries, hasLength(1));
+    final entry = logger.entries.single;
+    expect(entry.event, 'auth.login.failed');
+    expect(entry.error, contains('network down'));
+    expect(entry.stackTrace, isNotNull);
+    expect(entry.context['account'], 'user@example.com');
+  });
+
+  test('does not log expected ApiException login errors', () async {
+    final logger = RecordingAppLogger();
+    final service = _FakeAppService(
+      loginError: const ApiException(
+        statusCode: 403,
+        error: 'api.error.wrong_credentials',
+      ),
+    );
+    final viewModel = AppViewModel(service: service, logger: logger);
+
+    await viewModel.login(account: 'user@example.com', password: 'secret');
+
+    expect(logger.entries, isEmpty);
+  });
 }
 
 class _FakeAppService implements AppService {
+  _FakeAppService({this.loginError});
+
+  final Object? loginError;
+
   @override
   Future<bool> hasSession() async => true;
 
@@ -114,8 +154,13 @@ class _FakeAppService implements AppService {
   }
 
   @override
-  Future<void> login({required String account, required String password}) {
-    throw UnimplementedError();
+  Future<void> login({
+    required String account,
+    required String password,
+  }) async {
+    if (loginError case final error?) {
+      throw error;
+    }
   }
 
   @override

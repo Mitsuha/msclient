@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:desktop/app/app_config.dart';
 import 'package:desktop/app/models/tool_status.dart';
 import 'package:desktop/core/utils/json_coercion.dart';
 import 'package:desktop/core/utils/jwt.dart';
@@ -67,8 +68,8 @@ class CodexConfigManager implements ToolConfigManager {
     }
   }
 
-  /// Whether `.env` routes Codex through a proxy: both `http_proxy` and
-  /// `https_proxy` are present and non-empty.
+  /// Whether `.env` routes Codex through the local gost proxy: both
+  /// `http_proxy` and `https_proxy` must match [AppConfig.gostLocalProxyUrl].
   Future<bool> hasProxyEnv() async {
     try {
       final envFile = File('${await directoryPath()}/.env');
@@ -76,8 +77,8 @@ class CodexConfigManager implements ToolConfigManager {
         return false;
       }
       final env = parseEnvLines(await envFile.readAsLines());
-      return (env['http_proxy'] ?? '').isNotEmpty &&
-          (env['https_proxy'] ?? '').isNotEmpty;
+      return env['http_proxy'] == AppConfig.gostLocalProxyUrl &&
+          env['https_proxy'] == AppConfig.gostLocalProxyUrl;
     } catch (_) {
       return false;
     }
