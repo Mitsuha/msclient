@@ -43,6 +43,10 @@ grep -Fq 'Value="LaunchApplication"' "$UI_WXS"
 grep -Fq 'Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER"' "$UI_WXS"
 grep -Fq 'Dialog="InstallDirDlg" Control="ChangeFolder"' "$UI_WXS"
 grep -Fq 'Event="SpawnDialog" Value="BrowseDlg"' "$UI_WXS"
+if grep -Fq 'Dialog="BrowseDlg" Control="OK"' "$UI_WXS"; then
+  echo 'BrowseDlg OK events are already provided by WixUI_Common' >&2
+  exit 1
+fi
 
 grep -Fq 'https://cnb.cool/mirrorstages/gost/-/git/raw/main/gost_windows_amd64.exe' "$WORKFLOW"
 grep -Fq 'build/windows/x64/runner/Release/gost.exe' "$WORKFLOW"
