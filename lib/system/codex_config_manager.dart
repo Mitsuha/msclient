@@ -8,6 +8,7 @@ import 'package:desktop/core/utils/jwt.dart';
 import 'package:desktop/system/codex_config_backup.dart';
 import 'package:desktop/system/env_file.dart';
 import 'package:desktop/system/home_directory.dart';
+import 'package:desktop/system/safe_fs.dart';
 import 'package:desktop/system/tool_config_manager.dart';
 import 'package:flutter/foundation.dart';
 
@@ -32,7 +33,8 @@ class CodexConfigManager implements ToolConfigManager {
   Future<String> directoryPath() async => '${await _home.resolve()}/.codex';
 
   @override
-  Future<bool> isInstalled() async => Directory(await directoryPath()).exists();
+  Future<bool> isInstalled() async =>
+      safeExists(Directory(await directoryPath()));
 
   Future<bool> hasRestorableBackup() async =>
       CodexConfigBackup(Directory(await directoryPath())).hasRestorableBackup();

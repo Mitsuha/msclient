@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:desktop/system/safe_fs.dart';
+
 /// Manages the one-time backup and later restore of the user's original Codex
 /// configuration files (`auth.json` / `config.toml`).
 ///
@@ -54,11 +56,11 @@ class CodexConfigBackup {
 
   /// Whether there is at least one original config file available to restore.
   Future<bool> hasRestorableBackup() async {
-    if (!await backupDirectory.exists()) {
+    if (!await safeExists(backupDirectory)) {
       return false;
     }
     for (final name in managedFileNames) {
-      if (await _backupFile(name).exists()) {
+      if (await safeExists(_backupFile(name))) {
         return true;
       }
     }

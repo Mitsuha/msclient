@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:desktop/app/models/tool_status.dart';
 import 'package:desktop/system/home_directory.dart';
+import 'package:desktop/system/safe_fs.dart';
 import 'package:desktop/system/tool_config_manager.dart';
 import 'package:flutter/foundation.dart';
 
@@ -30,7 +31,8 @@ class ClaudeConfigManager implements ToolConfigManager {
   Future<String> directoryPath() async => '${await _home.resolve()}/.claude';
 
   @override
-  Future<bool> isInstalled() async => Directory(await directoryPath()).exists();
+  Future<bool> isInstalled() async =>
+      safeExists(Directory(await directoryPath()));
 
   Future<String> _credentialsFilePath() async =>
       '${await directoryPath()}/.credentials.json';
@@ -262,11 +264,11 @@ class ClaudeConfigManager implements ToolConfigManager {
     final backupDir = Directory(
       '${await directoryPath()}/$_backupDirectoryName',
     );
-    if (!await backupDir.exists()) {
+    if (!await safeExists(backupDir)) {
       return false;
     }
-    return await File('${backupDir.path}/$_settingsFileName').exists() ||
-        await File('${backupDir.path}/$_credentialsFileName').exists();
+    return await safeExists(File('${backupDir.path}/$_settingsFileName')) ||
+        await safeExists(File('${backupDir.path}/$_credentialsFileName'));
   }
 
   /// Restores the user's original Claude Code configuration from
