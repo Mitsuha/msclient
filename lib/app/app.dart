@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:ui' show AppExitResponse;
 
 import 'package:desktop/app/app_service.dart';
@@ -32,12 +33,22 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
   /// can shut sing-box down before the window is destroyed.
   late final AppViewModel _viewModel;
 
-  /// Catches every real app-exit path — macOS ⌘Q / dock "Quit" / app-menu
-  /// Quit, not just the tray item — so sing-box is always stopped before the
-  /// process dies. Window close/minimize does *not* come through here: it
-  /// hides to the tray (see [onWindowClose]) and sing-box keeps running.
+  /// Catches OS-level exit requests (macOS ⌘Q / dock "Quit" / app-menu Quit) so
+  /// sing-box is always stopped before the process dies.
+  ///
+  /// Platform trap: on **Windows** clicking the window's X is delivered here as
+  /// an exit request too (unlike macOS, where closing a window is not an app
+  /// quit). We must not treat that as a real quit — otherwise closing the window
+  /// would stop sing-box even though [onWindowClose] only hides to the tray,
+  /// silently killing the proxy while the app lives on. So on Windows this path
+  /// hides + cancels the exit unless [_quitting] marks a genuine quit (the tray
+  /// "退出" item / in-app exit).
   late final AppLifecycleListener _lifecycleListener;
   Future<void>? _shutdown;
+
+  /// Set once a real quit is underway so [_handleExitRequested] knows to let the
+  /// process die instead of hiding to the tray.
+  bool _quitting = false;
 
   @override
   void initState() {
@@ -66,6 +77,13 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
   }
 
   Future<AppExitResponse> _handleExitRequested() async {
+    // On Windows the window's X arrives as an OS exit request. Treat it as
+    // hide-to-tray (keeping sing-box alive), not a quit; the tray "退出" item is
+    // the only real exit and sets [_quitting] first.
+    if (Platform.isWindows && !_quitting) {
+      await _hideWindow();
+      return AppExitResponse.cancel;
+    }
     await _shutdownApp();
     return AppExitResponse.exit;
   }
@@ -99,6 +117,7 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
   }
 
   Future<void> _quit() async {
+    _quitting = true;
     await _shutdownApp();
     await _tray.quit();
   }
