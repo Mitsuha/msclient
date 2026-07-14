@@ -565,6 +565,15 @@ class _AccountSettings extends StatelessWidget {
           destructive: true,
           onPressed: onLogout,
         ),
+        const RowDivider(),
+        const StatusRow(
+          label: '版本号',
+          description: '当前客户端版本。',
+          enabled: true,
+          // Hardcoded per request; keep in sync with pubspec `version`.
+          enabledText: '1.0.1+5',
+          disabledText: '',
+        ),
       ],
     );
   }
