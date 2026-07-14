@@ -22,8 +22,13 @@ class StatusAlert extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = EnvironmentStatusPresentation.of(snapshot.environment);
-    final message = errorMessage ?? snapshot.message ?? style.defaultMessage;
+    final status = snapshot.isProxyRunning
+        ? snapshot.environment
+        : EnvironmentStatus.loading;
+    final style = EnvironmentStatusPresentation.of(status);
+    final message = status == EnvironmentStatus.loading
+        ? style.defaultMessage
+        : errorMessage ?? snapshot.message ?? style.defaultMessage;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -63,7 +68,7 @@ class StatusAlert extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          if (snapshot.environment == EnvironmentStatus.conflict)
+          if (status == EnvironmentStatus.conflict)
             AppButton(
               label: '重新检查',
               compact: true,
@@ -71,8 +76,7 @@ class StatusAlert extends StatelessWidget {
               disabledColor: AppColors.redDisabledBright,
               onPressed: isWorking ? null : onRefresh,
             )
-          else if (snapshot.environment ==
-              EnvironmentStatus.rootCertificateMissing)
+          else if (status == EnvironmentStatus.rootCertificateMissing)
             AppButton(
               label: '安装证书',
               compact: true,

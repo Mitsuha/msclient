@@ -31,12 +31,47 @@ void main() {
     await tempHome.delete(recursive: true);
   });
 
-  GostBinary createBinary({String? downloadBaseUrl}) => GostBinary(
+  GostBinary createBinary({
+    String? downloadBaseUrl,
+    bool? isWindows,
+    String? resolvedExecutable,
+  }) => GostBinary(
     home: _TestHome(tempHome.path),
     logger: logger,
     downloadBaseUrl:
         downloadBaseUrl ?? 'http://${server.address.host}:${server.port}',
+    isWindows: isWindows,
+    resolvedExecutable: resolvedExecutable,
   );
+
+  test('uses the application directory for the bundled Windows gost', () async {
+    final binary = createBinary(
+      isWindows: true,
+      resolvedExecutable: r'C:\Program Files\Mirrorstages\desktop.exe',
+    );
+
+    expect(await binary.path(), r'C:\Program Files\Mirrorstages\gost.exe');
+  });
+
+  test('does not download when the bundled Windows gost is missing', () async {
+    final binary = createBinary(
+      isWindows: true,
+      resolvedExecutable: '${tempHome.path}/desktop.exe',
+    );
+
+    await expectLater(
+      binary.ensureInstalled(),
+      throwsA(
+        isA<FileSystemException>().having(
+          (error) => error.message,
+          'message',
+          contains('bundled gost.exe was not found'),
+        ),
+      ),
+    );
+
+    expect(logger.entries, isEmpty);
+  });
 
   test('records download start and non-success HTTP response', () async {
     server.listen((request) async {

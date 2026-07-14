@@ -1,126 +1,124 @@
-# CI/CD 操作手册
+# CI/CD 发布手册
 
-本项目使用 GitHub Actions 和 Shorebird 为 Windows、Linux、macOS 发布正式版本与 Dart 热更新。
+本项目通过 GitHub Actions 和 Shorebird 发布 Windows、Linux、macOS 正式版本及 Dart 热更新。
 
-## 触发规则
+## 分支与触发规则
 
-普通分支 push、`master` push 和 Pull Request 均不触发 GitHub Actions。只有以下两类 tag 会启动 workflow：
+- 本地 `master` 对应 GitHub 仓库的 `rm` 分支，推送命令为
+  `git push github master:rm`。
+- 普通分支 push、`rm` 分支 push 和 Pull Request 都不会触发发布。
+- 正式 release tag：`v<major>.<minor>.<patch>+<build>`，例如
+  `v1.2.3+45`。
+- patch tag：`v<目标 release 版本>-patch.<序号>`，例如
+  `v1.2.3+45-patch.1`。
+- tag 去掉前导 `v` 和 patch 后缀后，必须与 `pubspec.yaml` 的
+  `version` 完全一致，否则 workflow 会终止。
 
-| 操作 | Tag 格式 | 示例 |
-|---|---|---|
-| Shorebird release | `v<major>.<minor>.<patch>+<build>` | `v1.2.3+45` |
-| Shorebird patch | `v<目标release版本>-patch.<序号>` | `v1.2.3+45-patch.1` |
-
-workflow 会严格校验 tag 和 `pubspec.yaml`，不能只依赖 tag 名相似。
-
-## 一次性配置
-
-### Shorebird API key
-
-在 [Shorebird Console](https://console.shorebird.dev) 的 **Account → API Keys** 创建 API key，然后在 GitHub 仓库的 **Settings → Secrets and variables → Actions** 中新增：
-
-```text
-Name: SHOREBIRD_TOKEN
-Value: sb_api_...
-```
-
-`SHOREBIRD_TOKEN` 是密钥，不能提交到仓库。`shorebird login:ci` 已废弃，应使用 Console 创建的 API key。详情见 [Shorebird GitHub Integration](https://docs.shorebird.dev/code-push/ci/github/)。
-
-### 本地 pre-commit
-
-当前 checkout 的 `.git/hooks/pre-commit` 会在每次 commit 前执行：
-
-```sh
-dart format --output=none --set-exit-if-changed .
-flutter analyze
-```
-
-hook 不修改文件，只在检查失败时阻止 commit。它只对当前 checkout 生效，也可以被 `git commit --no-verify` 绕过。GitHub Actions 不重复 format、analyze 或 test。
+GitHub Actions 仓库 Secrets 必须配置有效的 `SHOREBIRD_TOKEN`。
 
 ## 发布正式版本
 
-先把 `pubspec.yaml` 的完整版本设置为要发布的版本：
+正式版本适用于 Dart、原生代码、资源、字体、依赖或构建配置的任何变更。
+
+### 1. 同步发布分支
+
+```sh
+git fetch github rm
+git rebase github/rm
+```
+
+开始发布前，确认当前位于本地 `master`，并处理完 rebase 冲突。
+
+### 2. 更新版本
+
+修改 `pubspec.yaml`：
 
 ```yaml
 version: 1.2.3+45
 ```
 
-然后创建并推送完全对应的 tag：
+同一 `major.minor` 下，`build` 必须比之前的正式版本大。Windows MSI
+会把 `1.2.3+45` 映射成 ProductVersion `1.2.45`，因此 `major`、`minor`
+不能超过 255，`build` 不能超过 65535。
+
+### 3. 验证并提交
+
+```sh
+dart format --output=none --set-exit-if-changed .
+flutter analyze
+flutter test
+git diff --check
+git add -A
+git commit -m "release: 1.2.3+45"
+```
+
+### 4. 推送 `rm` 分支
+
+```sh
+git push github master:rm
+```
+
+确认推送成功后再创建 tag，保证 GitHub 的 `rm` 分支已经包含发布提交。
+
+### 5. 创建并推送 release tag
 
 ```sh
 git tag v1.2.3+45
 git push github v1.2.3+45
 ```
 
-tag 中不能省略 `+build`，且去掉前导 `v` 后必须和 `pubspec.yaml` 完全一致。
-
-release workflow 会用 Flutter `3.44.2` 并行执行三个 Shorebird release，然后上传以下 GitHub Actions artifacts：
+tag push 会触发 `.github/workflows/shorebird-release.yml`。workflow 并行创建
+三个平台的 Shorebird release，并生成保留 7 天的 GitHub Actions artifacts：
 
 - Windows：`MirrorStages-Desktop-1.2.3+45-windows-x64.msi`
 - Linux：`mirrorstages-desktop_1.2.3+45_amd64.deb`
 - macOS：`MirrorStages-Desktop-1.2.3+45-macos.dmg`
 
-artifact 保留 7 天。本流程不会创建 GitHub Release，也不会生成其他安装包格式。
-
-### MSI 版本映射
-
-Windows Installer 只比较三段 `major.minor.build`。项目按以下规则生成 MSI ProductVersion：
-
-```text
-pubspec/Shorebird 1.2.3+45 -> MSI 1.2.45
-```
-
-major、minor 来自 pubspec；MSI 第三段使用 Flutter build number。因此：
-
-- major、minor 不得超过 255。
-- build number 不得超过 65535。
-- 同一 major/minor 下，每次正式 release 的 build number 必须单调递增。
-
-artifact 文件名和 Shorebird 版本仍使用完整的 `1.2.3+45`。
+该 workflow 不会自动创建 GitHub Release 页面。
 
 ## 发布 patch
 
-patch 只能用于 Shorebird 支持的 Dart 代码变更。不要在 patch 中加入原生代码、资源、字体或构建配置变更；这类变更必须发布新的 release。
+patch 只适用于 Shorebird 支持的 Dart 代码变更。原生代码、资源、字体、依赖和
+构建配置发生变化时，必须发布新的正式版本。
 
-从目标 release 对应的代码准备修复，并保持 `pubspec.yaml` 版本不变：
+### 1. 准备目标版本代码
+
+从目标 release 对应的代码开始修复，并保持 `pubspec.yaml` 版本不变：
 
 ```yaml
 version: 1.2.3+45
 ```
 
-为第一个补丁创建 tag：
+完成修改后执行验证并提交：
+
+```sh
+dart format --output=none --set-exit-if-changed .
+flutter analyze
+flutter test
+git diff --check
+git add -A
+git commit -m "fix: describe the patch"
+git push github master:rm
+```
+
+### 2. 创建并推送 patch tag
+
+第一个 patch 使用 `.1`，后续依次使用 `.2`、`.3`：
 
 ```sh
 git tag v1.2.3+45-patch.1
 git push github v1.2.3+45-patch.1
 ```
 
-后续补丁依次使用 `.2`、`.3`。必须等待前一个 patch workflow 完成后再推送下一个 tag。
+tag push 会触发 `.github/workflows/shorebird-patch.yml`，并向目标 release
+`1.2.3+45` 的 Shorebird `stable` track 发布三个平台的 patch。必须等待前一个
+patch workflow 完成后再发布下一个序号。
 
-patch workflow 会显式指定 `--release-version=1.2.3+45`，不会使用 `latest`，并直接发布到 Shorebird `stable`。tag 推送后没有 staging 或人工审批环节。
+## 发布检查
 
-## 失败处理
+推送 tag 后，在 GitHub Actions 中确认 `prepare` 校验和三个系统任务全部成功。
 
-- tag 或 pubspec 校验失败：修正版本后创建新 tag；不要复用错误 tag。
-- 单个平台失败：在 GitHub Actions 中选择 **Re-run failed jobs**，只重跑失败平台。
-- patch 检测到 native 或 asset diff：停止 patch，改为递增 pubspec 版本并发布新 release。
-- 已成功的平台不会因另一平台失败而自动回滚。
-
-## 本地打包入口
-
-`packaging/` 是唯一打包实现。Makefile 和 workflow 是互不依赖的两个入口，都直接调用 `packaging/<platform>/`：
-
-```sh
-make package-windows
-make package-linux
-make package-macos
-```
-
-这些命令只负责把已经生成的 Shorebird/Flutter bundle 打成 MSI、DEB 或 DMG，不执行 Shorebird release。
-
-## 参考资料
-
-- [Shorebird Development Workflow](https://docs.shorebird.dev/code-push/guides/development-workflow/)
-- [Shorebird GitHub Integration](https://docs.shorebird.dev/code-push/ci/github/)
-- [Shorebird Create a Release](https://docs.shorebird.dev/code-push/release/)
-- [Shorebird Create a Patch](https://docs.shorebird.dev/code-push/patch/)
+- tag 或版本校验失败：修正代码和版本后使用一个新 tag，不要移动或复用已推送的 tag。
+- 单个平台失败：在 GitHub Actions 中执行 **Re-run failed jobs**。
+- patch 包含不支持的 native 或 asset diff：停止 patch，改为递增版本并发布正式 release。
+- 某个平台失败不会自动回滚其他已经成功的平台。

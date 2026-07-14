@@ -48,15 +48,26 @@ class AppViewModel extends ChangeNotifier {
   Future<void> bootstrap() async {
     // Launch the local proxy in the background; first run downloads the gost
     // binary, so this must not block the login UI.
-    unawaited(_service.startGost());
+    final gostStartup = _service.startGost();
 
     _isAuthenticated = await _service.hasSession();
     _isAuthReady = true;
     notifyListeners();
 
+    unawaited(_refreshWhenGostStarted(gostStartup));
+
     if (_isAuthenticated) {
       await load();
       _startAutoRefresh();
+    }
+  }
+
+  Future<void> _refreshWhenGostStarted(Future<void> startup) async {
+    try {
+      await startup;
+      await _autoRefresh();
+    } catch (_) {
+      // startGost is best-effort; the periodic refresh can retry health later.
     }
   }
 

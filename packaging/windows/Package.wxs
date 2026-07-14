@@ -7,11 +7,75 @@
     UpgradeCode="B3D9E2A1-7C4F-4E6A-9F2D-1A8C5E0B6D34"
     Scope="perMachine">
     <MediaTemplate EmbedCab="yes" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Mirrorstages is already installed." />
+
+    <Icon Id="Mirrorstages.ico" SourceFile="$(AppIcon)" />
+    <Property Id="ARPPRODUCTICON" Value="Mirrorstages.ico" />
+    <Property Id="CREATE_DESKTOP_SHORTCUT" Value="1" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Mirrorstages" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Mirrorstages" />
     </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="Mirrorstages" />
+    </StandardDirectory>
+    <StandardDirectory Id="DesktopFolder" />
 
-    <Files Include="$(SourceDir)\**" Directory="INSTALLFOLDER" />
+    <Files Include="$(SourceDir)\**" Directory="INSTALLFOLDER">
+      <Exclude Files="$(SourceDir)\desktop.exe" />
+    </Files>
+
+    <Component Id="ApplicationExecutable" Directory="INSTALLFOLDER">
+      <File Id="ApplicationExecutableFile" Source="$(SourceDir)\desktop.exe" KeyPath="yes" />
+    </Component>
+
+    <Component Id="StartMenuShortcutComponent" Directory="ApplicationProgramsFolder">
+      <Shortcut
+        Id="StartMenuShortcut"
+        Name="Mirrorstages"
+        Target="[#ApplicationExecutableFile]"
+        WorkingDirectory="INSTALLFOLDER"
+        Icon="Mirrorstages.ico" />
+      <RemoveFolder Id="RemoveApplicationProgramsFolder" On="uninstall" />
+      <RegistryValue
+        Root="HKLM"
+        Key="Software\MirrorStages\Mirrorstages"
+        Name="StartMenuShortcut"
+        Type="integer"
+        Value="1"
+        KeyPath="yes" />
+    </Component>
+
+    <Component
+      Id="DesktopShortcutComponent"
+      Directory="DesktopFolder"
+      Condition="CREATE_DESKTOP_SHORTCUT = 1"
+      Transitive="yes">
+      <Shortcut
+        Id="DesktopShortcut"
+        Name="Mirrorstages"
+        Target="[#ApplicationExecutableFile]"
+        WorkingDirectory="INSTALLFOLDER"
+        Icon="Mirrorstages.ico" />
+      <RegistryValue
+        Root="HKLM"
+        Key="Software\MirrorStages\Mirrorstages"
+        Name="DesktopShortcut"
+        Type="integer"
+        Value="1"
+        KeyPath="yes" />
+    </Component>
+
+    <CustomAction
+      Id="LaunchApplication"
+      FileRef="ApplicationExecutableFile"
+      ExeCommand=""
+      Execute="immediate"
+      Return="asyncNoWait"
+      Impersonate="yes" />
+
+    <UIRef Id="MirrorstagesUI" />
   </Package>
 </Wix>

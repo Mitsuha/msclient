@@ -12,12 +12,18 @@ class GostBinary {
     required this._logger,
     this.downloadBaseUrl = AppConfig.gostDownloadBaseUrl,
     HttpClient Function()? httpClientFactory,
-  }) : _httpClientFactory = httpClientFactory ?? HttpClient.new;
+    bool? isWindows,
+    String? resolvedExecutable,
+  }) : _httpClientFactory = httpClientFactory ?? HttpClient.new,
+       _isWindows = isWindows ?? Platform.isWindows,
+       _resolvedExecutable = resolvedExecutable ?? Platform.resolvedExecutable;
 
   final HomeDirectory _home;
   final AppLogger _logger;
   final String downloadBaseUrl;
   final HttpClient Function() _httpClientFactory;
+  final bool _isWindows;
+  final String _resolvedExecutable;
 
   /// The `gost_<os>_<arch>` asset name for the current platform.
   String get assetName {
@@ -41,8 +47,14 @@ class GostBinary {
 
   /// Absolute path the binary lives at once installed.
   Future<String> path() async {
-    final name = Platform.isWindows ? 'gost.exe' : 'gost';
-    return '${await _binDirectoryPath()}/$name';
+    if (_isWindows) {
+      final separator = _resolvedExecutable.lastIndexOf(RegExp(r'[/\\]'));
+      if (separator < 0) {
+        return 'gost.exe';
+      }
+      return '${_resolvedExecutable.substring(0, separator + 1)}gost.exe';
+    }
+    return '${await _binDirectoryPath()}/gost';
   }
 
   Future<bool> isInstalled() async => File(await path()).exists();
@@ -54,6 +66,12 @@ class GostBinary {
     final target = File(await path());
     if (await target.exists()) {
       return target.path;
+    }
+    if (_isWindows) {
+      throw FileSystemException(
+        'bundled gost.exe was not found; reinstall Mirrorstages',
+        target.path,
+      );
     }
     await _download('$downloadBaseUrl/$assetName', target);
     return target.path;

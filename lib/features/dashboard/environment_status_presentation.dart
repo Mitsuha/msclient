@@ -63,9 +63,9 @@ class EnvironmentStatusPresentation {
         border: AppColors.redTintBorder,
       ),
       EnvironmentStatus.loading => const EnvironmentStatusPresentation(
-        title: '正在检测',
-        badge: '读取中',
-        defaultMessage: '正在读取本机状态。',
+        title: '启动中',
+        badge: '启动中',
+        defaultMessage: '正在连接本地服务。',
         icon: CupertinoIcons.clock_fill,
         color: AppColors.blue,
         background: AppColors.infoTintBackground,

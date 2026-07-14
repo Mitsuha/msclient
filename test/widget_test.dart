@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:desktop/app/app_service.dart';
 import 'package:desktop/app/app_view_model.dart';
 import 'package:desktop/app/models/account_summary.dart';
@@ -35,6 +37,49 @@ void main() {
     expect(find.text('Professional Monthly'), findsOneWidget);
   });
 
+  testWidgets('shows starting while gost is not connected', (tester) async {
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => AppViewModel(
+          service: _FakeAppService(isProxyRunning: false),
+          logger: RecordingAppLogger(),
+        )..bootstrap(),
+        child: CupertinoApp(home: AppShell(onExit: () {})),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.text('启动中'), findsWidgets);
+    expect(find.text('运行环境正常'), findsNothing);
+  });
+
+  testWidgets('refreshes the snapshot when gost startup completes', (
+    tester,
+  ) async {
+    final startup = Completer<void>();
+    final service = _FakeAppService(
+      isProxyRunning: false,
+      gostStartup: startup,
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) =>
+            AppViewModel(service: service, logger: RecordingAppLogger())
+              ..bootstrap(),
+        child: CupertinoApp(home: AppShell(onExit: () {})),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('启动中'), findsWidgets);
+
+    startup.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('运行环境正常'), findsOneWidget);
+  });
+
   test('logs unexpected login errors with their stack trace', () async {
     final logger = RecordingAppLogger();
     final service = _FakeAppService(loginError: StateError('network down'));
@@ -67,16 +112,22 @@ void main() {
 }
 
 class _FakeAppService implements AppService {
-  _FakeAppService({this.loginError});
+  _FakeAppService({
+    this.loginError,
+    this.isProxyRunning = true,
+    this.gostStartup,
+  });
 
   final Object? loginError;
+  bool isProxyRunning;
+  final Completer<void>? gostStartup;
 
   @override
   Future<bool> hasSession() async => true;
 
   @override
   Future<AppSnapshot> loadSnapshot() async {
-    return const AppSnapshot(
+    return AppSnapshot(
       environment: EnvironmentStatus.ready,
       account: AccountSummary(
         account: 'mirrorstages@example.com',
@@ -99,7 +150,7 @@ class _FakeAppService implements AppService {
           planType: 'Max 20X',
         ),
       ),
-      isProxyRunning: true,
+      isProxyRunning: isProxyRunning,
       localConfiguration: LocalConfigurationStatus(
         codexDirectoryPath: '/Users/test/.codex',
         claudeDirectoryPath: '/Users/test/.claude',
@@ -195,7 +246,13 @@ class _FakeAppService implements AppService {
   }
 
   @override
-  Future<void> startGost() async {}
+  Future<void> startGost() async {
+    final startup = gostStartup;
+    if (startup != null) {
+      await startup.future;
+      isProxyRunning = true;
+    }
+  }
 
   @override
   Future<void> stopGost() async {}

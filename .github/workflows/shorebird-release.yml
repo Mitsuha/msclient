@@ -46,6 +46,18 @@ jobs:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
         run: shorebird release --platforms=windows
 
+      - name: Bundle gost for Windows
+        shell: pwsh
+        run: |
+          curl.exe `
+            --fail `
+            --location `
+            --output build/windows/x64/runner/Release/gost.exe `
+            https://cnb.cool/mirrorstages/gost/-/git/raw/main/gost_windows_amd64.exe
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to download gost.exe with exit code $LASTEXITCODE"
+          }
+
       - name: Install WiX Toolset
         shell: pwsh
         run: dotnet tool install --global wix --version 5.0.2
