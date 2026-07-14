@@ -29,6 +29,11 @@ ARGS_LOG="$ARGS_LOG" CREATE_DMG="$TMP_DIR/bin/create-dmg" \
   bash "$BUILDER" '1.2.3+45' "$TMP_DIR/Mirrorstages.app" "$TMP_DIR/out"
 
 ARGS="$(cat "$ARGS_LOG")"
+if [[ "$ARGS" == *'<--overwrite>'* ]]; then
+  printf 'create-dmg must not receive unsupported --overwrite option\n%s\n' "$ARGS" >&2
+  exit 1
+fi
+
 for expected in \
   '<--background>' \
   "<$SCRIPT_DIR/background.png>" \

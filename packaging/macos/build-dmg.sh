@@ -50,7 +50,6 @@ set +e
   --hide-extension "Mirrorstages.app" \
   --icon "README.txt" 360 110 \
   --app-drop-link 445 315 \
-  --overwrite \
   "$OUT_FILE" \
   "$STAGING"
 CREATE_DMG_STATUS=$?

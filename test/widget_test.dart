@@ -29,7 +29,7 @@ void main() {
 
     await tester.pump();
 
-    expect(find.text('MirrorStages'), findsOneWidget);
+    expect(find.text('Mirrorstages'), findsOneWidget);
     expect(find.text('运行环境正常'), findsOneWidget);
     expect(find.text('mirrorstages@example.com'), findsWidgets);
     expect(find.text('Professional Monthly'), findsOneWidget);

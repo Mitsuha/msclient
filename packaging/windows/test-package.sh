@@ -10,6 +10,7 @@ test -f "$BUILDER"
 test ! -e "$SCRIPT_DIR/installer.iss"
 
 grep -Fq 'Version="$(MsiVersion)"' "$WXS"
+grep -Fq '<MediaTemplate EmbedCab="yes" />' "$WXS"
 grep -Fq 'Files Include="$(SourceDir)\**"' "$WXS"
 grep -Fq 'Directory="INSTALLFOLDER"' "$WXS"
 grep -Fq 'ProgramFiles64Folder' "$WXS"

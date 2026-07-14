@@ -9,9 +9,6 @@ name: Shorebird Release
 permissions:
   contents: read
 
-env:
-  FLUTTER_VERSION: '3.44.2'
-
 jobs:
   prepare:
     runs-on: ubuntu-22.04
@@ -47,7 +44,7 @@ jobs:
         shell: bash
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
-        run: shorebird release --platforms=windows --flutter-version="$FLUTTER_VERSION"
+        run: shorebird release --platforms=windows
 
       - name: Install WiX Toolset
         shell: pwsh
@@ -96,7 +93,7 @@ jobs:
       - name: Create Shorebird release
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
-        run: shorebird release --platforms=linux --flutter-version="$FLUTTER_VERSION"
+        run: shorebird release --platforms=linux
 
       - name: Build DEB
         run: |
@@ -132,7 +129,7 @@ jobs:
       - name: Create Shorebird release
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
-        run: shorebird release --platforms=macos --flutter-version="$FLUTTER_VERSION"
+        run: shorebird release --platforms=macos
 
       - name: Install create-dmg
         run: brew install create-dmg
