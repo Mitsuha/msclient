@@ -37,7 +37,7 @@ void main() {
     expect(find.text('Professional Monthly'), findsOneWidget);
   });
 
-  testWidgets('shows starting while gost is not connected', (tester) async {
+  testWidgets('shows starting while sing-box is not connected', (tester) async {
     await tester.pumpWidget(
       ChangeNotifierProvider(
         create: (_) => AppViewModel(
@@ -54,13 +54,13 @@ void main() {
     expect(find.text('运行环境正常'), findsNothing);
   });
 
-  testWidgets('refreshes the snapshot when gost startup completes', (
+  testWidgets('refreshes the snapshot when sing-box startup completes', (
     tester,
   ) async {
     final startup = Completer<void>();
     final service = _FakeAppService(
       isProxyRunning: false,
-      gostStartup: startup,
+      proxyStartup: startup,
     );
 
     await tester.pumpWidget(
@@ -115,12 +115,12 @@ class _FakeAppService implements AppService {
   _FakeAppService({
     this.loginError,
     this.isProxyRunning = true,
-    this.gostStartup,
+    this.proxyStartup,
   });
 
   final Object? loginError;
   bool isProxyRunning;
-  final Completer<void>? gostStartup;
+  final Completer<void>? proxyStartup;
 
   @override
   Future<bool> hasSession() async => true;
@@ -246,8 +246,8 @@ class _FakeAppService implements AppService {
   }
 
   @override
-  Future<void> startGost() async {
-    final startup = gostStartup;
+  Future<void> startProxy() async {
+    final startup = proxyStartup;
     if (startup != null) {
       await startup.future;
       isProxyRunning = true;
@@ -255,7 +255,7 @@ class _FakeAppService implements AppService {
   }
 
   @override
-  Future<void> stopGost() async {}
+  Future<void> stopProxy() async {}
 
   @override
   Future<void> applyCodexInitStep(String stepId) {

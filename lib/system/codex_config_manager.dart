@@ -68,8 +68,8 @@ class CodexConfigManager implements ToolConfigManager {
     }
   }
 
-  /// Whether `.env` routes Codex through the local gost proxy: both
-  /// `http_proxy` and `https_proxy` must match [AppConfig.gostLocalProxyUrl].
+  /// Whether `.env` routes Codex through the local sing-box proxy: both
+  /// `http_proxy` and `https_proxy` must match [AppConfig.singboxLocalProxyUrl].
   Future<bool> hasProxyEnv() async {
     try {
       final envFile = File('${await directoryPath()}/.env');
@@ -77,8 +77,8 @@ class CodexConfigManager implements ToolConfigManager {
         return false;
       }
       final env = parseEnvLines(await envFile.readAsLines());
-      return env['http_proxy'] == AppConfig.gostLocalProxyUrl &&
-          env['https_proxy'] == AppConfig.gostLocalProxyUrl;
+      return env['http_proxy'] == AppConfig.singboxLocalProxyUrl &&
+          env['https_proxy'] == AppConfig.singboxLocalProxyUrl;
     } catch (_) {
       return false;
     }

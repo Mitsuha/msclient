@@ -43,7 +43,7 @@ class AppSnapshot {
   final DashboardData? dashboard;
   final List<ConflictProcess> conflicts;
 
-  /// Whether the local go-gost proxy is up. The tools route through it, so a
+  /// Whether the local sing-box proxy is up. The tools route through it, so a
   /// tool only counts as "running" when it is initialized *and* this is true.
   final bool isProxyRunning;
 

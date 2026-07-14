@@ -31,9 +31,9 @@ void main() {
 
   test('writes a structured JSON line to the local-date file', () async {
     await logger.info(
-      'gost.download.started',
-      'Starting gost download',
-      context: const {'asset': 'gost_darwin_arm64'},
+      'singbox.download.started',
+      'Starting sing-box download',
+      context: const {'asset': 'sing-box-darwin'},
     );
 
     final file = File('${tempHome.path}/.mstages/logs/app-2026-07-13.log');
@@ -42,9 +42,9 @@ void main() {
 
     expect(entry['timestamp'], '2026-07-13T09:08:07.006');
     expect(entry['level'], 'info');
-    expect(entry['event'], 'gost.download.started');
-    expect(entry['message'], 'Starting gost download');
-    expect(entry['context'], {'asset': 'gost_darwin_arm64'});
+    expect(entry['event'], 'singbox.download.started');
+    expect(entry['message'], 'Starting sing-box download');
+    expect(entry['context'], {'asset': 'sing-box-darwin'});
     expect(entry.containsKey('error'), isFalse);
     expect(entry.containsKey('stackTrace'), isFalse);
   });

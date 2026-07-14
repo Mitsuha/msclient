@@ -29,13 +29,13 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
   final WindowTray _tray = const WindowTray();
 
   /// Held here (rather than created inside the provider) so the tray quit path
-  /// can shut gost down before the window is destroyed.
+  /// can shut sing-box down before the window is destroyed.
   late final AppViewModel _viewModel;
 
   /// Catches every real app-exit path — macOS ⌘Q / dock "Quit" / app-menu
-  /// Quit, not just the tray item — so gost is always stopped before the
+  /// Quit, not just the tray item — so sing-box is always stopped before the
   /// process dies. Window close/minimize does *not* come through here: it
-  /// hides to the tray (see [onWindowClose]) and gost keeps running.
+  /// hides to the tray (see [onWindowClose]) and sing-box keeps running.
   late final AppLifecycleListener _lifecycleListener;
   Future<void>? _shutdown;
 

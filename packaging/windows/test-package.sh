@@ -48,7 +48,7 @@ if grep -Fq 'Dialog="BrowseDlg" Control="OK"' "$UI_WXS"; then
   exit 1
 fi
 
-grep -Fq 'https://cnb.cool/mirrorstages/gost/-/git/raw/main/gost_windows_amd64.exe' "$WORKFLOW"
-grep -Fq 'build/windows/x64/runner/Release/gost.exe' "$WORKFLOW"
+grep -Fq 'https://cnb.cool/mirrorstages/gost/-/git/raw/main/sing-box.exe' "$WORKFLOW"
+grep -Fq 'build/windows/x64/runner/Release/sing-box.exe' "$WORKFLOW"
 
 printf 'Windows packaging static tests passed\n'

@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:desktop/system/gost_binary.dart';
 import 'package:desktop/system/home_directory.dart';
+import 'package:desktop/system/singbox_binary.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/recording_app_logger.dart';
@@ -21,7 +21,7 @@ void main() {
   late RecordingAppLogger logger;
 
   setUp(() async {
-    tempHome = await Directory.systemTemp.createTemp('gost_binary_test_');
+    tempHome = await Directory.systemTemp.createTemp('singbox_binary_test_');
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     logger = RecordingAppLogger();
   });
@@ -31,11 +31,11 @@ void main() {
     await tempHome.delete(recursive: true);
   });
 
-  GostBinary createBinary({
+  SingboxBinary createBinary({
     String? downloadBaseUrl,
     bool? isWindows,
     String? resolvedExecutable,
-  }) => GostBinary(
+  }) => SingboxBinary(
     home: _TestHome(tempHome.path),
     logger: logger,
     downloadBaseUrl:
@@ -44,33 +44,40 @@ void main() {
     resolvedExecutable: resolvedExecutable,
   );
 
-  test('uses the application directory for the bundled Windows gost', () async {
+  test('uses the application directory for the Windows sing-box', () async {
     final binary = createBinary(
       isWindows: true,
       resolvedExecutable: r'C:\Program Files\Mirrorstages\desktop.exe',
     );
 
-    expect(await binary.path(), r'C:\Program Files\Mirrorstages\gost.exe');
+    expect(await binary.path(), r'C:\Program Files\Mirrorstages\sing-box.exe');
   });
 
-  test('does not download when the bundled Windows gost is missing', () async {
+  test('uses ~/.mstages/bin on non-Windows', () async {
+    final binary = createBinary(isWindows: false);
+
+    expect(await binary.path(), '${tempHome.path}/.mstages/bin/sing-box');
+  });
+
+  test('downloads when the Windows sing-box is missing', () async {
+    // Unlike gost, Windows now falls back to a download instead of throwing;
+    // hitting the (failing) server proves it tried rather than bailing early.
+    server.listen((request) async {
+      request.response.statusCode = HttpStatus.serviceUnavailable;
+      await request.response.close();
+    });
+
     final binary = createBinary(
       isWindows: true,
       resolvedExecutable: '${tempHome.path}/desktop.exe',
     );
 
-    await expectLater(
-      binary.ensureInstalled(),
-      throwsA(
-        isA<FileSystemException>().having(
-          (error) => error.message,
-          'message',
-          contains('bundled gost.exe was not found'),
-        ),
-      ),
-    );
+    await expectLater(binary.ensureInstalled(), throwsA(isA<HttpException>()));
 
-    expect(logger.entries, isEmpty);
+    expect(logger.entries.map((entry) => entry.event), [
+      'singbox.download.started',
+      'singbox.download.http_failed',
+    ]);
   });
 
   test('records download start and non-success HTTP response', () async {
@@ -85,13 +92,13 @@ void main() {
     );
 
     expect(logger.entries.map((entry) => entry.event), [
-      'gost.download.started',
-      'gost.download.http_failed',
+      'singbox.download.started',
+      'singbox.download.http_failed',
     ]);
     final failure = logger.entries.last;
     expect(failure.context['statusCode'], HttpStatus.serviceUnavailable);
     expect(failure.context['asset'], isNotEmpty);
-    expect(failure.error, contains('downloading gost failed: HTTP 503'));
+    expect(failure.error, contains('downloading sing-box failed: HTTP 503'));
     expect(failure.stackTrace, isNotNull);
   });
 
@@ -109,12 +116,12 @@ void main() {
     );
 
     expect(logger.entries.map((entry) => entry.event), [
-      'gost.download.started',
-      'gost.download.write_failed',
+      'singbox.download.started',
+      'singbox.download.write_failed',
     ]);
     final failure = logger.entries.last;
     expect(failure.context['stage'], 'validate_size');
-    expect(failure.error, contains('downloaded gost is too small'));
+    expect(failure.error, contains('downloaded sing-box is too small'));
     expect(failure.stackTrace, isNotNull);
   });
 
@@ -127,8 +134,8 @@ void main() {
     );
 
     expect(logger.entries.map((entry) => entry.event), [
-      'gost.download.started',
-      'gost.download.write_failed',
+      'singbox.download.started',
+      'singbox.download.write_failed',
     ]);
     expect(logger.entries.last.context['stage'], 'create_directory');
   });

@@ -42,23 +42,29 @@ void main() {
       await home.delete(recursive: true);
     });
 
-    test('passes when both proxies point at the local gost proxy', () async {
-      await File('${home.path}/.codex/.env').writeAsString(
-        'http_proxy=${AppConfig.gostLocalProxyUrl}\n'
-        'https_proxy=${AppConfig.gostLocalProxyUrl}\n',
-      );
+    test(
+      'passes when both proxies point at the local sing-box proxy',
+      () async {
+        await File('${home.path}/.codex/.env').writeAsString(
+          'http_proxy=${AppConfig.singboxLocalProxyUrl}\n'
+          'https_proxy=${AppConfig.singboxLocalProxyUrl}\n',
+        );
 
-      expect(await manager.hasProxyEnv(), isTrue);
-    });
+        expect(await manager.hasProxyEnv(), isTrue);
+      },
+    );
 
-    test('fails when non-empty proxies do not point at local gost', () async {
-      await File('${home.path}/.codex/.env').writeAsString(
-        'http_proxy=http://other-proxy:8080\n'
-        'https_proxy=http://other-proxy:8080\n',
-      );
+    test(
+      'fails when non-empty proxies do not point at local sing-box',
+      () async {
+        await File('${home.path}/.codex/.env').writeAsString(
+          'http_proxy=http://other-proxy:8080\n'
+          'https_proxy=http://other-proxy:8080\n',
+        );
 
-      expect(await manager.hasProxyEnv(), isFalse);
-    });
+        expect(await manager.hasProxyEnv(), isFalse);
+      },
+    );
   });
 
   group('codexAuthGrantsMirrorStages', () {

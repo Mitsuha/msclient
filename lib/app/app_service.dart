@@ -2,19 +2,20 @@ import 'dart:async';
 
 import 'package:desktop/app/app_config.dart';
 import 'package:desktop/app/app_exceptions.dart';
-import 'package:desktop/app/gost/gost_controller.dart';
 import 'package:desktop/app/initialization/claude_initializer.dart';
 import 'package:desktop/app/initialization/codex_initializer.dart';
 import 'package:desktop/app/initialization/tool_initializer.dart';
 import 'package:desktop/app/models/account_summary.dart';
 import 'package:desktop/app/models/app_snapshot.dart';
 import 'package:desktop/app/models/local_status.dart';
+import 'package:desktop/app/singbox/singbox_config_builder.dart';
+import 'package:desktop/app/singbox/singbox_controller.dart';
 import 'package:desktop/core/api/api_client.dart';
 import 'package:desktop/core/logging/app_logger.dart';
 import 'package:desktop/data/api/auth_api.dart';
 import 'package:desktop/data/api/dashboard_api.dart';
 import 'package:desktop/data/api/desktop_config_api.dart';
-import 'package:desktop/data/api/gost_api.dart';
+import 'package:desktop/data/api/singbox_clash_api.dart';
 import 'package:desktop/data/api/tool_auth_api.dart';
 import 'package:desktop/data/api/user_pack_api.dart';
 import 'package:desktop/data/models/account_models.dart';
@@ -24,11 +25,11 @@ import 'package:desktop/data/session/session_store.dart';
 import 'package:desktop/system/claude_config_manager.dart';
 import 'package:desktop/system/codex_config_manager.dart';
 import 'package:desktop/system/external_browser.dart';
-import 'package:desktop/system/gost_binary.dart';
-import 'package:desktop/system/gost_process.dart';
 import 'package:desktop/system/home_directory.dart';
 import 'package:desktop/system/process_inspector.dart';
 import 'package:desktop/system/root_certificate_manager.dart';
+import 'package:desktop/system/singbox_binary.dart';
+import 'package:desktop/system/singbox_process.dart';
 import 'package:flutter/foundation.dart';
 
 /// Facade the view model talks to: orchestrates the remote APIs (data/) and
@@ -48,7 +49,7 @@ class AppService {
     required this._codexConfig,
     required this._claudeConfig,
     required this._browser,
-    required this._gost,
+    required this._singbox,
   });
 
   /// Wires the service against the production endpoints in [AppConfig].
@@ -72,10 +73,14 @@ class AppService {
       codexConfig: CodexConfigManager(home: home),
       claudeConfig: ClaudeConfigManager(home: home),
       browser: const ExternalBrowser(),
-      gost: GostController(
-        binary: GostBinary(home: home, logger: logger),
-        process: GostProcess(),
-        api: GostApiClient(baseUri: AppConfig.gostApiBaseUri),
+      singbox: SingboxController(
+        binary: SingboxBinary(home: home, logger: logger),
+        process: SingboxProcess(),
+        api: SingboxClashApiClient(
+          baseUri: AppConfig.singboxClashApiBaseUri,
+          secret: AppConfig.singboxClashSecret,
+        ),
+        builder: const SingboxConfigBuilder(),
         home: home,
         logger: logger,
       ),
@@ -95,21 +100,27 @@ class AppService {
   final CodexConfigManager _codexConfig;
   final ClaudeConfigManager _claudeConfig;
   final ExternalBrowser _browser;
-  final GostController _gost;
+  final SingboxController _singbox;
 
-  /// Launches go-gost and points its chain at the selected node. Best-effort:
-  /// never throws, so a failure (e.g. offline first run) can't block the app.
-  Future<void> startGost() async {
+  /// The most recent node list fetched from the server, so [selectProxy] can
+  /// rebuild the config against the full set of outbounds.
+  List<ClientProxyOption> _lastProxyOptions = const [];
+
+  /// Launches sing-box with an outbound per node and the selected node active.
+  /// Best-effort: never throws, so a failure (e.g. offline first run) can't
+  /// block the app.
+  Future<void> startProxy() async {
     try {
-      await _gost.start();
-      await _gost.applyProxyNode(await _resolveRemoteProxyUrl());
+      final options = await _loadProxyOptions();
+      final selected = await _selectedProxyUrlFor(options);
+      await _singbox.apply(_proxiesOrFallback(options), selectedUrl: selected);
     } catch (error) {
-      debugPrint('startGost failed: $error');
+      debugPrint('startProxy failed: $error');
     }
   }
 
-  /// Stops the local go-gost process. Call on app shutdown.
-  Future<void> stopGost() => _gost.stop();
+  /// Stops the local sing-box process. Call on app shutdown.
+  Future<void> stopProxy() => _singbox.stop();
 
   Future<bool> hasSession() async {
     return await _sessionStore.load() != null;
@@ -145,19 +156,23 @@ class AppService {
     final proxyOptions = await _loadProxyOptions();
     final selectedProxyUrl = await _selectedProxyUrlFor(proxyOptions);
 
-    // Keep gost's chain aligned with the selection; no-ops when unchanged.
-    // Best-effort: nobody awaits this, so a dead gost must not become an
-    // unhandled zone exception.
+    // Keep sing-box aligned with the current node list/selection; restarts when
+    // the outbound set changed, flips the selector when only the choice did,
+    // no-ops when unchanged. Best-effort: nobody awaits this, so a dead sing-box
+    // must not become an unhandled zone exception.
     unawaited(
-      _gost
-          .applyProxyNode(selectedProxyUrl ?? AppConfig.proxyUrl)
+      _singbox
+          .apply(
+            _proxiesOrFallback(proxyOptions),
+            selectedUrl: selectedProxyUrl,
+          )
           .catchError(
-            (Object error) => debugPrint('applyProxyNode failed: $error'),
+            (Object error) => debugPrint('singbox.apply failed: $error'),
           ),
     );
 
-    // Gate the tool cards' "正在运行" on gost actually being up.
-    final proxyRunning = await _gost.isHealthy();
+    // Gate the tool cards' "正在运行" on sing-box actually being up.
+    final proxyRunning = await _singbox.isHealthy();
 
     try {
       final overview = await _dashboardApi.overview(token: session.token);
@@ -327,17 +342,20 @@ class AppService {
     await _claudeInitializer(userPackId: userPackId ?? 0).applyStep(stepId);
   }
 
-  /// Persists the picked node and re-points gost's chain at it. Tools keep
+  /// Persists the picked node and switches sing-box's selector to it. Tools keep
   /// pointing at the constant local proxy; their configs are re-pinned to it
   /// only to migrate any that still carry an old remote address.
   Future<void> selectProxy(String url) async {
     await _proxyPreferences.save(url);
-    await _gost.applyProxyNode(url);
+    await _singbox.apply(
+      _proxiesOrFallback(_lastProxyOptions),
+      selectedUrl: url,
+    );
     if ((await _codexConfig.readStatus()).isInitialized) {
-      await _codexConfig.writeProxyEnv(AppConfig.gostLocalProxyUrl);
+      await _codexConfig.writeProxyEnv(AppConfig.singboxLocalProxyUrl);
     }
     if ((await _claudeConfig.readStatus()).isInitialized) {
-      await _claudeConfig.writeProxySettings(AppConfig.gostLocalProxyUrl);
+      await _claudeConfig.writeProxySettings(AppConfig.singboxLocalProxyUrl);
     }
   }
 
@@ -351,11 +369,21 @@ class AppService {
 
   Future<List<ClientProxyOption>> _loadProxyOptions() async {
     try {
-      return await _desktopConfigApi.clientProxies();
+      final options = await _desktopConfigApi.clientProxies();
+      _lastProxyOptions = options;
+      return options;
     } catch (_) {
       return const [];
     }
   }
+
+  /// Guarantees a non-empty node list so the config always has at least one
+  /// outbound: the built-in [AppConfig.proxyUrl] stands in when the server list
+  /// is empty/unavailable.
+  List<ClientProxyOption> _proxiesOrFallback(List<ClientProxyOption> options) =>
+      options.isEmpty
+      ? const [ClientProxyOption(name: 'default', url: AppConfig.proxyUrl)]
+      : options;
 
   /// The saved choice wins while it is still offered by the server; otherwise
   /// the server-sorted first option is the default.
@@ -367,15 +395,9 @@ class AppService {
     return options.isEmpty ? null : options.first.url;
   }
 
-  /// The constant local go-gost proxy written into every tool's config.
-  Future<String> _resolveLocalProxyUrl() async => AppConfig.gostLocalProxyUrl;
-
-  /// The remote node gost forwards to, falling back to the built-in address.
-  Future<String> _resolveRemoteProxyUrl() async {
-    final options = await _loadProxyOptions();
-    final selected = await _selectedProxyUrlFor(options);
-    return selected ?? AppConfig.proxyUrl;
-  }
+  /// The constant local sing-box proxy written into every tool's config.
+  Future<String> _resolveLocalProxyUrl() async =>
+      AppConfig.singboxLocalProxyUrl;
 
   /// Clears the MirrorStages proxy configuration written into the local tools:
   /// removes the proxy entries from Claude Code's `settings.json` and deletes

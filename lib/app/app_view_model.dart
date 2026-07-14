@@ -46,15 +46,15 @@ class AppViewModel extends ChangeNotifier {
   String? get loginErrorMessage => _loginErrorMessage;
 
   Future<void> bootstrap() async {
-    // Launch the local proxy in the background; first run downloads the gost
-    // binary, so this must not block the login UI.
-    final gostStartup = _service.startGost();
+    // Launch the local proxy in the background; first run may download the
+    // sing-box binary, so this must not block the login UI.
+    final proxyStartup = _service.startProxy();
 
     _isAuthenticated = await _service.hasSession();
     _isAuthReady = true;
     notifyListeners();
 
-    unawaited(_refreshWhenGostStarted(gostStartup));
+    unawaited(_refreshWhenProxyStarted(proxyStartup));
 
     if (_isAuthenticated) {
       await load();
@@ -62,12 +62,12 @@ class AppViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> _refreshWhenGostStarted(Future<void> startup) async {
+  Future<void> _refreshWhenProxyStarted(Future<void> startup) async {
     try {
       await startup;
       await _autoRefresh();
     } catch (_) {
-      // startGost is best-effort; the periodic refresh can retry health later.
+      // startProxy is best-effort; the periodic refresh can retry health later.
     }
   }
 
@@ -75,7 +75,7 @@ class AppViewModel extends ChangeNotifier {
   /// really quits (the tray "退出" item / a forced destroy).
   Future<void> shutdown() async {
     _stopAutoRefresh();
-    await _service.stopGost();
+    await _service.stopProxy();
   }
 
   Future<void> load() async {
@@ -116,7 +116,7 @@ class AppViewModel extends ChangeNotifier {
     });
   }
 
-  /// Persists the chosen node and re-points gost's chain at it.
+  /// Persists the chosen node and switches sing-box's selector to it.
   Future<void> selectProxy(String url) async {
     await _run(() async {
       await _service.selectProxy(url);

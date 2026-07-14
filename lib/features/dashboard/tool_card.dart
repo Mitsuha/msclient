@@ -10,7 +10,7 @@ import 'package:flutter/cupertino.dart';
 ///
 /// Always surfaces the account fields (empty until initialized). The header
 /// pill reflects three states: `未初始化` before setup, `正在运行` once the tool is
-/// initialized *and* the local go-gost proxy it routes through is up, or
+/// initialized *and* the local sing-box proxy it routes through is up, or
 /// `代理未运行` when it is initialized but that proxy is down. The bottom action
 /// is `更换计费` when initialized, or `初始化` when not — both open the billing
 /// picker and apply the chosen method via [onApplyBilling].
@@ -33,7 +33,7 @@ class ToolCard extends StatelessWidget {
   final String subtitle;
   final ToolStatus status;
 
-  /// Whether the local go-gost proxy is up. An initialized tool only counts as
+  /// Whether the local sing-box proxy is up. An initialized tool only counts as
   /// "正在运行" while this holds, since every request routes through that proxy.
   final bool isProxyRunning;
 

@@ -4,21 +4,21 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
-/// Owns the running `go-gost` child process: launches it with `-api` (no
-/// services — those are pushed at runtime by [GostController]), tees its output
-/// to a log file, and kills it on shutdown.
-class GostProcess {
-  GostProcess();
+/// Owns the running `sing-box` child process: launches it with `run -c <config>`
+/// (outbounds/route come from the config file written by [SingboxController]),
+/// tees its output to a log file, and kills it on shutdown.
+class SingboxProcess {
+  SingboxProcess();
 
   Process? _process;
   IOSink? _logSink;
 
   bool get isRunning => _process != null;
 
-  /// Spawns gost. A no-op if it is already running.
+  /// Spawns sing-box. A no-op if it is already running.
   Future<void> start({
     required String binaryPath,
-    required String apiAddress,
+    required String configPath,
     required String logPath,
   }) async {
     if (_process != null) {
@@ -29,17 +29,18 @@ class GostProcess {
     await logFile.parent.create(recursive: true);
     final sink = logFile.openWrite();
 
-    final process = await Process.start(binaryPath, ['-api', apiAddress]);
+    final process = await Process.start(binaryPath, ['run', '-c', configPath]);
     _process = process;
     _logSink = sink;
 
     _pipe(process.stdout, sink);
     _pipe(process.stderr, sink);
 
-    // If gost dies on its own, drop our handle so a later start() can respawn it.
+    // If sing-box dies on its own, drop our handle so a later start() can
+    // respawn it.
     unawaited(
       process.exitCode.then((code) {
-        debugPrint('gost exited with code $code');
+        debugPrint('sing-box exited with code $code');
         if (identical(_process, process)) {
           _process = null;
           _closeLog();
@@ -48,7 +49,7 @@ class GostProcess {
     );
   }
 
-  /// Kills gost and closes the log. Safe to call when not running.
+  /// Kills sing-box and closes the log. Safe to call when not running.
   Future<void> stop() async {
     final process = _process;
     _process = null;
