@@ -160,3 +160,35 @@ jobs:
           path: dist/MirrorStages-Desktop-${{ env.VERSION }}-macos.dmg
           if-no-files-found: error
           retention-days: 7
+
+  publish:
+    name: Publish installers to CNB
+    needs: [prepare, windows, linux, macos]
+    runs-on: ubuntu-22.04
+    concurrency:
+      group: cnb-release-publish
+      cancel-in-progress: false
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v7
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: MirrorStages-Desktop-${{ env.VERSION }}-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Prepare CNB credentials
+        env:
+          CNB_GIT_CREDENTIALS: ${{ secrets.CNB_GIT_CREDENTIALS }}
+        run: |
+          test -n "$CNB_GIT_CREDENTIALS"
+          printf '%s\n' "$CNB_GIT_CREDENTIALS" > "$HOME/.git-credentials"
+          chmod 600 "$HOME/.git-credentials"
+          git config --global credential.helper store
+
+      - name: Update CNB release repository
+        run: bash packaging/publish-cnb.sh "$VERSION" artifacts

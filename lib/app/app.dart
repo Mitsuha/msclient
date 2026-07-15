@@ -5,6 +5,7 @@ import 'dart:ui' show AppExitResponse;
 import 'package:desktop/app/app_service.dart';
 import 'package:desktop/app/app_view_model.dart';
 import 'package:desktop/features/shell/app_shell.dart';
+import 'package:desktop/system/app_updater.dart';
 import 'package:desktop/system/file_app_logger.dart';
 import 'package:desktop/system/home_directory.dart';
 import 'package:desktop/system/window_tray.dart';
@@ -32,6 +33,7 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
   /// Held here (rather than created inside the provider) so the tray quit path
   /// can shut sing-box down before the window is destroyed.
   late final AppViewModel _viewModel;
+  late final AppUpdater _updater;
 
   /// Catches OS-level exit requests (macOS ⌘Q / dock "Quit" / app-menu Quit) so
   /// sing-box is always stopped before the process dies.
@@ -58,12 +60,14 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
       service: AppService.production(logger: logger),
       logger: logger,
     )..bootstrap();
+    _updater = AppUpdater(logger, _showUpdateDialog);
     _lifecycleListener = AppLifecycleListener(
       onExitRequested: _handleExitRequested,
     );
     windowManager.addListener(this);
     trayManager.addListener(this);
     _tray.install();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _updater.start());
   }
 
   @override
@@ -72,6 +76,7 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
     windowManager.removeListener(this);
     _lifecycleListener.dispose();
     _tray.remove();
+    _updater.dispose();
     _viewModel.dispose();
     super.dispose();
   }
@@ -126,6 +131,45 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
 
   Future<void> _hideWindow() => _tray.hideWindow();
 
+  Future<void> _showUpdateDialog(DownloadedUpdate update) async {
+    if (!mounted) return;
+    await _tray.showWindow();
+    if (!mounted) return;
+
+    final action = await showCupertinoDialog<_UpdateDialogAction>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('新版本已经下载好，可以立即更新'),
+        content: Text(
+          '\n当前版本：${update.currentVersion}'
+          '\n最新版本：${update.latestVersion}'
+          '${update.forced ? '\n\n本次更新表示旧版本已经无法使用，需要升级到最新版本' : ''}',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            isDestructiveAction: update.forced,
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_UpdateDialogAction.cancel),
+            child: Text(update.forced ? '退出' : '取消'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_UpdateDialogAction.install),
+            child: const Text('确认'),
+          ),
+        ],
+      ),
+    );
+
+    if (action == _UpdateDialogAction.install) {
+      await _updater.runInstaller(update.installerPath);
+      await _quit();
+    } else if (update.forced) {
+      await _quit();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<AppViewModel>.value(
@@ -173,3 +217,5 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
 class _HideWindowIntent extends Intent {
   const _HideWindowIntent();
 }
+
+enum _UpdateDialogAction { cancel, install }

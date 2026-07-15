@@ -6,6 +6,7 @@ import 'package:desktop/ui/app_colors.dart';
 import 'package:desktop/ui/widgets/app_button.dart';
 import 'package:desktop/ui/widgets/section_card.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
@@ -538,7 +539,7 @@ class _CertificateSettings extends StatelessWidget {
   }
 }
 
-class _AccountSettings extends StatelessWidget {
+class _AccountSettings extends StatefulWidget {
   const _AccountSettings({
     required this.onOpenAdminConsole,
     required this.onLogout,
@@ -548,6 +549,13 @@ class _AccountSettings extends StatelessWidget {
   final VoidCallback onLogout;
 
   @override
+  State<_AccountSettings> createState() => _AccountSettingsState();
+}
+
+class _AccountSettingsState extends State<_AccountSettings> {
+  late final Future<PackageInfo> _packageInfo = PackageInfo.fromPlatform();
+
+  @override
   Widget build(BuildContext context) {
     return Column(
       children: [
@@ -555,7 +563,7 @@ class _AccountSettings extends StatelessWidget {
           label: '管理账户与套餐',
           description: '打开 MirrorStages 后台查看余额、套餐和账户信息。',
           icon: CupertinoIcons.arrow_up_right_square,
-          onPressed: onOpenAdminConsole,
+          onPressed: widget.onOpenAdminConsole,
         ),
         const RowDivider(),
         ActionRow(
@@ -563,16 +571,27 @@ class _AccountSettings extends StatelessWidget {
           description: '清除当前客户端保存的登录状态。',
           icon: CupertinoIcons.square_arrow_right,
           destructive: true,
-          onPressed: onLogout,
+          onPressed: widget.onLogout,
         ),
         const RowDivider(),
-        const StatusRow(
-          label: '版本号',
-          description: '当前客户端版本。',
-          enabled: true,
-          // Hardcoded per request; keep in sync with pubspec `version`.
-          enabledText: '1.0.1+5',
-          disabledText: '',
+        FutureBuilder<PackageInfo>(
+          future: _packageInfo,
+          builder: (context, snapshot) {
+            final packageInfo = snapshot.data;
+            final version = packageInfo == null
+                ? '读取中…'
+                : packageInfo.buildNumber.isEmpty
+                ? packageInfo.version
+                : '${packageInfo.version}+${packageInfo.buildNumber}';
+
+            return StatusRow(
+              label: '版本号',
+              description: '当前客户端版本。',
+              enabled: true,
+              enabledText: version,
+              disabledText: '',
+            );
+          },
         ),
       ],
     );
