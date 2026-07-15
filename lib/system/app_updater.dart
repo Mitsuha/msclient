@@ -80,7 +80,6 @@ class AppUpdater {
       final installer = await _download(downloadUri);
       if (_disposed) return;
 
-      _announcedVersion = manifest.version;
       await _onUpdateReady(
         DownloadedUpdate(
           currentVersion: currentVersion,
@@ -89,6 +88,7 @@ class AppUpdater {
           installerPath: installer.path,
         ),
       );
+      _announcedVersion = manifest.version;
     } catch (error, stackTrace) {
       await _logger.error(
         'app.update.failed',

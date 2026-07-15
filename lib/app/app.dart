@@ -5,6 +5,7 @@ import 'dart:ui' show AppExitResponse;
 import 'package:desktop/app/app_service.dart';
 import 'package:desktop/app/app_view_model.dart';
 import 'package:desktop/features/shell/app_shell.dart';
+import 'package:desktop/features/shell/update_dialog.dart';
 import 'package:desktop/system/app_updater.dart';
 import 'package:desktop/system/file_app_logger.dart';
 import 'package:desktop/system/home_directory.dart';
@@ -29,6 +30,7 @@ class MirrorStagesApp extends StatefulWidget {
 class _MirrorStagesAppState extends State<MirrorStagesApp>
     with WindowListener, TrayListener {
   final WindowTray _tray = const WindowTray();
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   /// Held here (rather than created inside the provider) so the tray quit path
   /// can shut sing-box down before the window is destroyed.
@@ -136,33 +138,14 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
     await _tray.showWindow();
     if (!mounted) return;
 
-    final action = await showCupertinoDialog<_UpdateDialogAction>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('新版本已经下载好，可以立即更新'),
-        content: Text(
-          '\n当前版本：${update.currentVersion}'
-          '\n最新版本：${update.latestVersion}'
-          '${update.forced ? '\n\n本次更新表示旧版本已经无法使用，需要升级到最新版本' : ''}',
-        ),
-        actions: [
-          CupertinoDialogAction(
-            isDestructiveAction: update.forced,
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(_UpdateDialogAction.cancel),
-            child: Text(update.forced ? '退出' : '取消'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(_UpdateDialogAction.install),
-            child: const Text('确认'),
-          ),
-        ],
-      ),
-    );
+    final dialogContext = _navigatorKey.currentContext;
+    if (dialogContext == null || !dialogContext.mounted) {
+      throw StateError('App navigator is not ready');
+    }
 
-    if (action == _UpdateDialogAction.install) {
+    final action = await showUpdateDialog(dialogContext, update);
+
+    if (action == UpdateDialogAction.install) {
       await _updater.runInstaller(update.installerPath);
       await _quit();
     } else if (update.forced) {
@@ -175,6 +158,7 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
     return ChangeNotifierProvider<AppViewModel>.value(
       value: _viewModel,
       child: CupertinoApp(
+        navigatorKey: _navigatorKey,
         title: 'Mirrorstages',
         debugShowCheckedModeBanner: false,
         theme: const CupertinoThemeData(
@@ -217,5 +201,3 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
 class _HideWindowIntent extends Intent {
   const _HideWindowIntent();
 }
-
-enum _UpdateDialogAction { cancel, install }

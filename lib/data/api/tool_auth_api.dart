@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:desktop/core/api/api_client.dart';
 
 /// Issues MirrorStages credentials for a local AI CLI tool. Codex and Claude
@@ -22,7 +24,12 @@ class ToolAuthApi {
     return _client.postJson(
       _endpoint,
       token: token,
-      body: {'user_pack_id': userPackId},
+      body: {
+        // Dart's own OS name (`macos` / `windows` / `linux`); the backend keys
+        // on `macos`, not the Go CLI's `darwin`.
+        'user_pack_id': userPackId,
+        'client_type': Platform.operatingSystem,
+      },
     );
   }
 }
