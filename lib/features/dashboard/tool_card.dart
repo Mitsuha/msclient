@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:desktop/app/models/billing_outcome.dart';
 import 'package:desktop/app/models/tool_status.dart';
 import 'package:desktop/data/models/pack_models.dart';
 import 'package:desktop/features/dashboard/billing_dialog.dart';
+import 'package:desktop/features/dashboard/no_available_account_dialog.dart';
 import 'package:desktop/ui/app_colors.dart';
 import 'package:flutter/cupertino.dart';
 
@@ -43,9 +45,10 @@ class ToolCard extends StatelessWidget {
   final List<UserPack> packs;
 
   /// Applies the chosen billing method: 0 for pay-as-you-go (按量计费) or a
-  /// subscription pack id. Resolves to true when the credentials were
-  /// rewritten successfully, which triggers the "restart to take effect" hint.
-  final Future<bool> Function(int userPackId) onApplyBilling;
+  /// subscription pack id. The [BillingOutcome] drives the follow-up UI:
+  /// [BillingOutcome.success] shows the "restart to take effect" hint, while
+  /// [BillingOutcome.noAvailableAccount] pops the empty-pool dialog.
+  final Future<BillingOutcome> Function(int userPackId) onApplyBilling;
 
   @override
   Widget build(BuildContext context) {
@@ -223,7 +226,7 @@ class _Body extends StatefulWidget {
   final ToolAccount? account;
   final bool isWorking;
   final List<UserPack> packs;
-  final Future<bool> Function(int userPackId) onApplyBilling;
+  final Future<BillingOutcome> Function(int userPackId) onApplyBilling;
 
   @override
   State<_Body> createState() => _BodyState();
@@ -262,11 +265,12 @@ class _BodyState extends State<_Body> {
       _showRestartHint = false;
     });
 
-    final succeeded = await widget.onApplyBilling(selected);
+    final outcome = await widget.onApplyBilling(selected);
     if (!mounted) {
       return;
     }
 
+    final succeeded = outcome == BillingOutcome.success;
     setState(() {
       _isApplying = false;
       _showRestartHint = succeeded;
@@ -278,6 +282,8 @@ class _BodyState extends State<_Body> {
           setState(() => _showRestartHint = false);
         }
       });
+    } else if (outcome == BillingOutcome.noAvailableAccount) {
+      await showNoAvailableAccountDialog(context, toolName: widget.toolName);
     }
   }
 

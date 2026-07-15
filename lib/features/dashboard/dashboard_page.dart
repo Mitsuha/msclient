@@ -1,4 +1,5 @@
 import 'package:desktop/app/models/app_snapshot.dart';
+import 'package:desktop/app/models/billing_outcome.dart';
 import 'package:desktop/features/dashboard/status_alert.dart';
 import 'package:desktop/features/dashboard/subscription_summary.dart';
 import 'package:desktop/features/dashboard/tool_card.dart';
@@ -23,8 +24,8 @@ class DashboardPage extends StatelessWidget {
   final bool isWorking;
   final String? errorMessage;
   final VoidCallback onRefresh;
-  final Future<bool> Function(int userPackId) onApplyCodexBilling;
-  final Future<bool> Function(int userPackId) onApplyClaudeBilling;
+  final Future<BillingOutcome> Function(int userPackId) onApplyCodexBilling;
+  final Future<BillingOutcome> Function(int userPackId) onApplyClaudeBilling;
   final VoidCallback onInstallRootCertificate;
 
   @override

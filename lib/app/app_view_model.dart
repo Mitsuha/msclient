@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:desktop/app/app_exceptions.dart';
 import 'package:desktop/app/app_service.dart';
 import 'package:desktop/app/models/app_snapshot.dart';
+import 'package:desktop/app/models/billing_outcome.dart';
 import 'package:desktop/app/models/nav_section.dart';
 import 'package:desktop/core/api/api_client.dart';
 import 'package:desktop/core/logging/app_logger.dart';
@@ -97,9 +98,8 @@ class AppViewModel extends ChangeNotifier {
 
   /// Applies the chosen billing method to Codex by rewriting its credentials.
   /// [userPackId] is 0 for pay-as-you-go (按量计费) or a subscription pack id.
-  /// Returns true when the credentials were rewritten successfully.
-  Future<bool> applyCodexBilling(int userPackId) {
-    return _run(() async {
+  Future<BillingOutcome> applyCodexBilling(int userPackId) {
+    return _applyBilling(() async {
       await _service.initializeLocalProxyEnv(userPackId: userPackId);
       return _service.loadSnapshot();
     });
@@ -107,10 +107,9 @@ class AppViewModel extends ChangeNotifier {
 
   /// Applies the chosen billing method to Claude Code by rewriting its
   /// credentials. [userPackId] is 0 for pay-as-you-go (按量计费) or a
-  /// subscription pack id. Returns true when the credentials were rewritten
-  /// successfully.
-  Future<bool> applyClaudeBilling(int userPackId) {
-    return _run(() async {
+  /// subscription pack id.
+  Future<BillingOutcome> applyClaudeBilling(int userPackId) {
+    return _applyBilling(() async {
       await _service.initializeClaude(userPackId: userPackId);
       return _service.loadSnapshot();
     });
@@ -220,6 +219,40 @@ class AppViewModel extends ChangeNotifier {
 
   Future<void> openAdminConsole() async {
     await _service.openAdminConsole();
+  }
+
+  /// Runs a billing re-allocation like [_run], but reports its outcome as a
+  /// [BillingOutcome] so the card can react per-case. An empty account pool
+  /// (`no_available_account`) is surfaced by the caller as a dedicated dialog,
+  /// so it is *not* raised into [errorMessage]; every other failure still is.
+  Future<BillingOutcome> _applyBilling(
+    Future<AppSnapshot> Function() action,
+  ) async {
+    _isWorking = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      _snapshot = await action();
+      return BillingOutcome.success;
+    } on UnauthenticatedException {
+      _stopAutoRefresh();
+      _isAuthenticated = false;
+      _snapshot = null;
+      return BillingOutcome.failed;
+    } on ApiException catch (error) {
+      if (error.error == 'api.error.no_available_account') {
+        return BillingOutcome.noAvailableAccount;
+      }
+      _errorMessage = error.toString();
+      return BillingOutcome.failed;
+    } catch (error) {
+      _errorMessage = error.toString();
+      return BillingOutcome.failed;
+    } finally {
+      _isWorking = false;
+      notifyListeners();
+    }
   }
 
   /// Runs [action] with the working flag raised, capturing failures into
