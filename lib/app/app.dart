@@ -10,7 +10,7 @@ import 'package:desktop/system/app_updater.dart';
 import 'package:desktop/system/file_app_logger.dart';
 import 'package:desktop/system/home_directory.dart';
 import 'package:desktop/system/window_tray.dart';
-import 'package:desktop/ui/app_colors.dart';
+import 'package:desktop/ui/app_theme.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -161,18 +161,7 @@ class _MirrorStagesAppState extends State<MirrorStagesApp>
         navigatorKey: _navigatorKey,
         title: 'Mirrorstages',
         debugShowCheckedModeBanner: false,
-        theme: const CupertinoThemeData(
-          brightness: Brightness.light,
-          primaryColor: AppColors.blue,
-          scaffoldBackgroundColor: AppColors.windowBackground,
-          textTheme: CupertinoTextThemeData(
-            textStyle: TextStyle(
-              color: AppColors.label,
-              fontSize: 14,
-              letterSpacing: 0,
-            ),
-          ),
-        ),
+        theme: buildAppTheme(isWindows: Platform.isWindows),
         home: Shortcuts(
           shortcuts: const {
             SingleActivator(LogicalKeyboardKey.keyW, meta: true):
