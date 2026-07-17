@@ -110,7 +110,6 @@ class AppUpdater {
         ? _defaultInstallerName
         : uri.pathSegments.last;
     final target = File('${directory.path}/$fileName');
-    final temporary = File('${target.path}.download');
 
     final request = http.Request('GET', uri);
     final response = await _client.send(request);
@@ -122,11 +121,10 @@ class AppUpdater {
     }
 
     try {
-      await response.stream.pipe(temporary.openWrite());
-      if (await target.exists()) await target.delete();
-      return temporary.rename(target.path);
+      await response.stream.pipe(target.openWrite());
+      return target;
     } catch (_) {
-      if (await temporary.exists()) await temporary.delete();
+      if (await target.exists()) await target.delete();
       rethrow;
     }
   }

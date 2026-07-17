@@ -407,6 +407,39 @@ class AppService {
     await _codexConfig.clearProxyEnv();
   }
 
+  /// Strips the local sing-box proxy from both tools' configs on app quit,
+  /// preserving every other setting (Claude `settings.json` keeps its other
+  /// entries; Codex `.env` keeps any non-proxy entries). Best-effort per tool
+  /// so one failure never blocks the other or the quit sequence. Called before
+  /// the proxy is stopped so the tools stop pointing at a dead local address.
+  Future<void> stripToolProxyConfig() async {
+    try {
+      await _claudeConfig.clearProxySettings();
+    } catch (_) {}
+    try {
+      await _codexConfig.removeProxyEnv();
+    } catch (_) {}
+  }
+
+  /// Re-pins the local proxy for any tool whose on-disk credentials are still a
+  /// MirrorStages-issued (parseable) account, silently and without prompting.
+  /// Run once on a genuine launch to restore the proxy config stripped on the
+  /// previous quit. Best-effort per tool. Uses the auth-only predicates so it
+  /// still recognizes our account even though the proxy config is currently
+  /// absent (unlike `readStatus().isInitialized`, which requires the proxy).
+  Future<void> reapplyIssuedProxyConfig() async {
+    try {
+      if (await _codexConfig.hasMirrorStagesAuth()) {
+        await _codexConfig.writeProxyEnv(AppConfig.singboxLocalProxyUrl);
+      }
+    } catch (_) {}
+    try {
+      if (await _claudeConfig.hasMirrorStagesCredentials()) {
+        await _claudeConfig.writeProxySettings(AppConfig.singboxLocalProxyUrl);
+      }
+    } catch (_) {}
+  }
+
   /// Restores the user's original Codex configuration from
   /// `~/.codex/old_config`. Throws [CodexConfigRestoreException] when there is
   /// no backup to restore.

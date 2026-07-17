@@ -21,6 +21,11 @@ class AppViewModel extends ChangeNotifier {
   /// How often the snapshot is silently refreshed while signed in.
   static const _autoRefreshInterval = Duration(seconds: 30);
 
+  /// How often each initialized tool silently rotates its account while signed
+  /// in. Cheap on the server side: when the current account is still usable the
+  /// backend just returns it unchanged.
+  static const _autoSwitchInterval = Duration(minutes: 1);
+
   AppSnapshot? _snapshot;
   NavSection _selectedSection = NavSection.dashboard;
   bool _isWorking = false;
@@ -33,8 +38,15 @@ class AppViewModel extends ChangeNotifier {
   /// Periodic background refresh; only runs while authenticated.
   Timer? _autoRefreshTimer;
 
+  /// Periodic background account rotation; only runs while authenticated.
+  Timer? _autoSwitchTimer;
+
   /// True while a silent auto-refresh is in flight, so ticks never overlap.
   bool _isAutoRefreshing = false;
+
+  /// True while a silent auto-switch is in flight, so ticks never overlap and
+  /// never race the auto-refresh over [_snapshot].
+  bool _isAutoSwitching = false;
 
   AppSnapshot? get snapshot => _snapshot;
   NavSection get selectedSection => _selectedSection;
@@ -54,6 +66,14 @@ class AppViewModel extends ChangeNotifier {
     _isAuthenticated = await _service.hasSession();
     _isAuthReady = true;
     notifyListeners();
+
+    // Restore the proxy config stripped on the previous quit, for any tool
+    // whose on-disk credentials are still a MirrorStages-issued account. Awaited
+    // here — after the login screen has rendered above, but before anything
+    // reads tool status — so the initialization check never observes a
+    // half-written config. Local file IO only; the proxy is already starting in
+    // the background, so this does not delay the UI.
+    await _service.reapplyIssuedProxyConfig();
 
     unawaited(_refreshWhenProxyStarted(proxyStartup));
 
@@ -76,6 +96,7 @@ class AppViewModel extends ChangeNotifier {
   /// really quits (the tray "退出" item / a forced destroy).
   Future<void> shutdown() async {
     _stopAutoRefresh();
+    await _service.stripToolProxyConfig();
     await _service.stopProxy();
   }
 
@@ -285,18 +306,28 @@ class AppViewModel extends ChangeNotifier {
       _autoRefreshInterval,
       (_) => _autoRefresh(),
     );
+    _autoSwitchTimer?.cancel();
+    _autoSwitchTimer = Timer.periodic(
+      _autoSwitchInterval,
+      (_) => _autoSwitch(),
+    );
   }
 
   void _stopAutoRefresh() {
     _autoRefreshTimer?.cancel();
     _autoRefreshTimer = null;
+    _autoSwitchTimer?.cancel();
+    _autoSwitchTimer = null;
   }
 
   /// Reloads the snapshot in the background without raising the working flag,
   /// so the periodic refresh never flashes spinners or disables controls. Ticks
   /// are skipped while a foreground action or a previous tick is still running.
   Future<void> _autoRefresh() async {
-    if (!_isAuthenticated || _isWorking || _isAutoRefreshing) {
+    if (!_isAuthenticated ||
+        _isWorking ||
+        _isAutoRefreshing ||
+        _isAutoSwitching) {
       return;
     }
     _isAutoRefreshing = true;
@@ -313,6 +344,51 @@ class AppViewModel extends ChangeNotifier {
       // Transient failure: keep the last good snapshot and try again next tick.
     } finally {
       _isAutoRefreshing = false;
+    }
+  }
+
+  /// Silently rotates the account of every *initialized* tool, reusing the pack
+  /// its current credentials are billed against (0 = pay-as-you-go / 按量计费,
+  /// i.e. no pack). Runs without raising the working flag, so it never flashes
+  /// spinners; ticks are skipped while a foreground action, an auto-refresh, or
+  /// a previous tick is still running. A tool that isn't initialized is left
+  /// untouched — only initialized tools may auto-switch.
+  Future<void> _autoSwitch() async {
+    final snapshot = _snapshot;
+    if (!_isAuthenticated ||
+        _isWorking ||
+        _isAutoRefreshing ||
+        _isAutoSwitching ||
+        snapshot == null) {
+      return;
+    }
+    if (!snapshot.codex.isInitialized && !snapshot.claude.isInitialized) {
+      return;
+    }
+    _isAutoSwitching = true;
+    try {
+      if (snapshot.codex.isInitialized) {
+        await _service.initializeLocalProxyEnv(
+          userPackId: snapshot.codex.account?.userPackId ?? 0,
+        );
+      }
+      if (snapshot.claude.isInitialized) {
+        await _service.initializeClaude(
+          userPackId: snapshot.claude.account?.userPackId ?? 0,
+        );
+      }
+      _snapshot = await _service.loadSnapshot();
+      notifyListeners();
+    } on UnauthenticatedException {
+      _stopAutoRefresh();
+      _isAuthenticated = false;
+      _snapshot = null;
+      notifyListeners();
+    } catch (_) {
+      // Best-effort rotation (e.g. an empty account pool): keep the last good
+      // snapshot and try again next tick.
+    } finally {
+      _isAutoSwitching = false;
     }
   }
 

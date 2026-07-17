@@ -106,6 +106,24 @@ class CodexConfigManager implements ToolConfigManager {
     }
   }
 
+  /// Removes only `http_proxy` / `https_proxy` from `.env`, preserving any
+  /// other entries the user keeps in the file. Deletes the file if it becomes
+  /// empty. A missing file is a no-op.
+  Future<void> removeProxyEnv() async {
+    final envFile = File('${await directoryPath()}/.env');
+    if (!await envFile.exists()) {
+      return;
+    }
+    final env = await _readEnv(envFile)
+      ..remove('http_proxy')
+      ..remove('https_proxy');
+    if (env.isEmpty) {
+      await envFile.delete();
+    } else {
+      await envFile.writeAsString(serializeEnv(env));
+    }
+  }
+
   /// Whether `auth.json` carries a MirrorStages grant (see
   /// [codexAuthGrantsMirrorStages]).
   Future<bool> hasMirrorStagesAuth() async {

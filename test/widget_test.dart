@@ -246,6 +246,12 @@ class _FakeAppService implements AppService {
   }
 
   @override
+  Future<void> stripToolProxyConfig() async {}
+
+  @override
+  Future<void> reapplyIssuedProxyConfig() async {}
+
+  @override
   Future<void> startProxy() async {
     final startup = proxyStartup;
     if (startup != null) {

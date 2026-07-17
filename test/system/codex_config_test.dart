@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:desktop/app/app_config.dart';
 import 'package:desktop/system/codex_config_manager.dart';
+import 'package:desktop/system/env_file.dart';
 import 'package:desktop/system/home_directory.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -65,6 +66,57 @@ void main() {
         expect(await manager.hasProxyEnv(), isFalse);
       },
     );
+  });
+
+  group('CodexConfigManager.removeProxyEnv', () {
+    late Directory home;
+    late CodexConfigManager manager;
+
+    setUp(() async {
+      home = await Directory.systemTemp.createTemp('codex-config-test-');
+      manager = CodexConfigManager(home: _FakeHome(home.path));
+      await Directory('${home.path}/.codex').create();
+    });
+
+    tearDown(() async {
+      await home.delete(recursive: true);
+    });
+
+    test('removes proxy keys but preserves other entries', () async {
+      final envFile = File('${home.path}/.codex/.env');
+      await envFile.writeAsString(
+        'http_proxy=${AppConfig.singboxLocalProxyUrl}\n'
+        'https_proxy=${AppConfig.singboxLocalProxyUrl}\n'
+        'foo=bar\n',
+      );
+
+      await manager.removeProxyEnv();
+
+      final env = parseEnvLines(await envFile.readAsLines());
+      expect(env.containsKey('http_proxy'), isFalse);
+      expect(env.containsKey('https_proxy'), isFalse);
+      expect(env['foo'], 'bar');
+    });
+
+    test('deletes the file when only proxy keys were present', () async {
+      final envFile = File('${home.path}/.codex/.env');
+      await envFile.writeAsString(
+        'http_proxy=${AppConfig.singboxLocalProxyUrl}\n'
+        'https_proxy=${AppConfig.singboxLocalProxyUrl}\n',
+      );
+
+      await manager.removeProxyEnv();
+
+      expect(await envFile.exists(), isFalse);
+    });
+
+    test('is a no-op when the file is missing', () async {
+      final envFile = File('${home.path}/.codex/.env');
+
+      await manager.removeProxyEnv();
+
+      expect(await envFile.exists(), isFalse);
+    });
   });
 
   group('codexAuthGrantsMirrorStages', () {

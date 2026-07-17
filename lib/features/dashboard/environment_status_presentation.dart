@@ -47,7 +47,7 @@ class EnvironmentStatusPresentation {
       EnvironmentStatus.ready => const EnvironmentStatusPresentation(
         title: '运行环境正常',
         badge: '正常',
-        defaultMessage: '本机环境已配置完毕，可正常使用 MirrorStages。',
+        defaultMessage: 'MirrorStages 环境已配置完毕，可启动 Codex\\Claude Code。',
         icon: CupertinoIcons.check_mark_circled_solid,
         color: AppColors.green,
         background: AppColors.greenTintBackground,
