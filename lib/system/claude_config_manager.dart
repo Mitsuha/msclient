@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:desktop/app/app_config.dart';
 import 'package:desktop/app/models/tool_status.dart';
 import 'package:desktop/system/home_directory.dart';
 import 'package:desktop/system/safe_fs.dart';
@@ -47,10 +48,37 @@ class ClaudeConfigManager implements ToolConfigManager {
   static const _settingsFileName = 'settings.json';
   static const _credentialsFileName = '.credentials.json';
 
+  /// Backup of the pre-MirrorStages values of the `~/.claude.json` fields that
+  /// [writeAuth] merges into. Stored as a small JSON object (which of the
+  /// managed keys existed, and their original values) so restore can put the
+  /// user's profile back without disturbing the rest of the file.
+  static const _profileBackupFileName = 'claude-profile.json';
+  static const _profileManagedKeys = [
+    'oauthAccount',
+    'userID',
+    'machineID',
+    'hasCompletedOnboarding',
+  ];
+
   /// Whether the stored credentials decode into a MirrorStages account —
   /// the check side of the credentials init step.
   Future<bool> hasMirrorStagesCredentials() async =>
       (await readStatus()).isInitialized;
+
+  // --- ToolConfigManager proxy/backup lifecycle (delegates to the concrete
+  // per-file methods below; the initializer steps use those directly) ---
+
+  @override
+  Future<bool> hasIssuedCredentials() => hasMirrorStagesCredentials();
+
+  @override
+  Future<void> writeProxy(String proxyUrl) => writeProxySettings(proxyUrl);
+
+  @override
+  Future<void> stripProxy() => clearProxySettings();
+
+  @override
+  Future<void> clearProxy() => clearProxySettings();
 
   /// Applies the MirrorStages auth returned by `POST /user/claude-auth`.
   ///
@@ -106,8 +134,11 @@ class ClaudeConfigManager implements ToolConfigManager {
     await file.writeAsString('${encoder.convert(profile)}\n');
   }
 
-  /// Whether `settings.json` routes Claude Code through a proxy: its `env`
-  /// carries non-empty `HTTPS_PROXY` and `HTTP_PROXY` entries.
+  /// Whether `settings.json` routes Claude Code through the local sing-box
+  /// proxy: its `env` carries `HTTPS_PROXY` and `HTTP_PROXY` both equal to
+  /// [AppConfig.singboxLocalProxyUrl]. Matching the exact URL (rather than just
+  /// "non-empty") keeps this in step with Codex's [CodexConfigManager.hasProxyEnv]
+  /// so a stale proxy address no longer counts as initialized.
   Future<bool> hasProxySettings() async {
     try {
       final file = File('${await directoryPath()}/$_settingsFileName');
@@ -122,12 +153,9 @@ class ClaudeConfigManager implements ToolConfigManager {
       if (env is! Map) {
         return false;
       }
-      bool has(String key) {
-        final value = env[key];
-        return value is String && value.isNotEmpty;
-      }
+      bool matches(String key) => env[key] == AppConfig.singboxLocalProxyUrl;
 
-      return has('HTTPS_PROXY') && has('HTTP_PROXY');
+      return matches('HTTPS_PROXY') && matches('HTTP_PROXY');
     } catch (_) {
       return false;
     }
@@ -205,6 +233,7 @@ class ClaudeConfigManager implements ToolConfigManager {
   ///
   /// Credentials are snapshotted before the credentials step runs, so the
   /// backup captures the user's file rather than the MirrorStages one.
+  @override
   Future<void> preserveOriginals() async {
     final claudeDir = await directoryPath();
     await Directory(claudeDir).create(recursive: true);
@@ -216,6 +245,29 @@ class ClaudeConfigManager implements ToolConfigManager {
       backupDir: backupDir,
     );
     await _preserveCredentialsOriginal(claudeDir);
+    await _preserveProfileOriginal(backupDir);
+  }
+
+  /// Snapshots the pre-MirrorStages values of the `~/.claude.json` fields that
+  /// [writeAuth] merges into, once. `writeAuth` mutates the shared profile in
+  /// place (it does not replace the whole file), so the backup records only the
+  /// managed keys — which existed and their values — rather than the entire
+  /// profile. Restore uses that to undo the merge while leaving the user's
+  /// project history and other profile state intact.
+  Future<void> _preserveProfileOriginal(Directory backupDir) async {
+    final backup = File('${backupDir.path}/$_profileBackupFileName');
+    if (await backup.exists()) {
+      return;
+    }
+    final profile = await _readJsonObject(File(await _profileFilePath()));
+    final snapshot = <String, dynamic>{};
+    for (final key in _profileManagedKeys) {
+      if (profile.containsKey(key)) {
+        snapshot[key] = profile[key];
+      }
+    }
+    await backupDir.create(recursive: true);
+    await backup.writeAsString(jsonEncode(snapshot));
   }
 
   /// Snapshots the user's original credentials into `~/.claude/old_config`
@@ -259,7 +311,11 @@ class ClaudeConfigManager implements ToolConfigManager {
     }
   }
 
-  /// Whether a `~/.claude/old_config` backup exists that can be restored.
+  /// Whether a `~/.claude/old_config` backup exists that can be restored. The
+  /// profile snapshot is written on every first-time init (even when nothing
+  /// else was), so its presence alone means the merge into `~/.claude.json` can
+  /// be undone.
+  @override
   Future<bool> hasRestorableBackup() async {
     final backupDir = Directory(
       '${await directoryPath()}/$_backupDirectoryName',
@@ -268,15 +324,18 @@ class ClaudeConfigManager implements ToolConfigManager {
       return false;
     }
     return await safeExists(File('${backupDir.path}/$_settingsFileName')) ||
-        await safeExists(File('${backupDir.path}/$_credentialsFileName'));
+        await safeExists(File('${backupDir.path}/$_credentialsFileName')) ||
+        await safeExists(File('${backupDir.path}/$_profileBackupFileName'));
   }
 
   /// Restores the user's original Claude Code configuration from
   /// `~/.claude/old_config`: `settings.json` and the credentials (Keychain on
   /// macOS, `.credentials.json` elsewhere). A missing backup file means the
   /// original did not exist, so the MirrorStages-written live copy is removed
-  /// to return to a pristine state. Throws [ClaudeConfigRestoreException] when
-  /// there is nothing to restore. Finally clears the backup directory.
+  /// to return to a pristine state. The `~/.claude.json` merge is undone in
+  /// place ([_restoreProfile]). Throws [ClaudeConfigRestoreException] when there
+  /// is nothing to restore. Finally clears the backup directory.
+  @override
   Future<void> restoreOriginals() async {
     final claudeDir = await directoryPath();
     final backupDir = Directory('$claudeDir/$_backupDirectoryName');
@@ -303,9 +362,36 @@ class ClaudeConfigManager implements ToolConfigManager {
       );
     }
 
+    await _restoreProfile(backupDir);
+
     if (await backupDir.exists()) {
       await backupDir.delete(recursive: true);
     }
+  }
+
+  /// Undoes [writeAuth]'s merge into `~/.claude.json`: for each managed key,
+  /// restores its original value when the backup recorded one, otherwise
+  /// removes the key MirrorStages added. Every other field in the profile
+  /// (project history, MCP servers, …) is left untouched. A missing backup is a
+  /// no-op.
+  Future<void> _restoreProfile(Directory backupDir) async {
+    final backup = File('${backupDir.path}/$_profileBackupFileName');
+    if (!await backup.exists()) {
+      return;
+    }
+    final original = await _readJsonObject(backup);
+    final profileFile = File(await _profileFilePath());
+    final profile = await _readJsonObject(profileFile);
+    for (final key in _profileManagedKeys) {
+      if (original.containsKey(key)) {
+        profile[key] = original[key];
+      } else {
+        profile.remove(key);
+      }
+    }
+
+    const encoder = JsonEncoder.withIndent('  ');
+    await profileFile.writeAsString('${encoder.convert(profile)}\n');
   }
 
   /// Copies [backup] back over [live] when the backup exists; otherwise removes

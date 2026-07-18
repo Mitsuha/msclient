@@ -1,4 +1,4 @@
-import 'package:desktop/app/initialization/tool_initializer.dart';
+import 'package:desktop/domain/tools/tool_initializer.dart';
 import 'package:desktop/system/codex_config_manager.dart';
 
 /// Step ids of the Codex initialization, in order.

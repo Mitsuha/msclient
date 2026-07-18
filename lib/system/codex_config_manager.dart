@@ -36,8 +36,24 @@ class CodexConfigManager implements ToolConfigManager {
   Future<bool> isInstalled() async =>
       safeExists(Directory(await directoryPath()));
 
+  @override
   Future<bool> hasRestorableBackup() async =>
       CodexConfigBackup(Directory(await directoryPath())).hasRestorableBackup();
+
+  // --- ToolConfigManager proxy/backup lifecycle (delegates to the concrete
+  // per-file methods below; the initializer steps use those directly) ---
+
+  @override
+  Future<bool> hasIssuedCredentials() => hasMirrorStagesAuth();
+
+  @override
+  Future<void> writeProxy(String proxyUrl) => writeProxyEnv(proxyUrl);
+
+  @override
+  Future<void> stripProxy() => removeProxyEnv();
+
+  @override
+  Future<void> clearProxy() => clearProxyEnv();
 
   /// Reports the Codex initialization state. Codex counts as initialized only
   /// when all three checks pass:
@@ -179,6 +195,7 @@ class CodexConfigManager implements ToolConfigManager {
   /// `~/.codex/old_config` (each at most once) before MirrorStages overwrites
   /// them. Called only for a full first-time initialization, so no other entry
   /// point creates the backup.
+  @override
   Future<void> preserveOriginals() async {
     await CodexConfigBackup(
       Directory(await directoryPath()),
@@ -191,6 +208,7 @@ class CodexConfigManager implements ToolConfigManager {
   /// Deletes the current auth.json / config.toml and moves the backed-up
   /// originals back into place. Throws [CodexConfigRestoreException] when
   /// there is no backup to restore.
+  @override
   Future<void> restoreOriginals() async {
     final backup = CodexConfigBackup(Directory(await directoryPath()));
     if (!await backup.hasRestorableBackup()) {

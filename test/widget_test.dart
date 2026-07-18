@@ -10,6 +10,7 @@ import 'package:desktop/core/api/api_client.dart';
 import 'package:desktop/data/models/account_models.dart';
 import 'package:desktop/data/models/dashboard_models.dart';
 import 'package:desktop/data/models/pack_models.dart';
+import 'package:desktop/domain/tools/tool.dart';
 import 'package:desktop/features/shell/app_shell.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -228,12 +229,7 @@ class _FakeAppService implements AppService {
   }
 
   @override
-  Future<void> initializeLocalProxyEnv({int userPackId = 0}) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<void> initializeClaude({int userPackId = 0}) {
+  Future<void> initializeTool(ToolId id, {int userPackId = 0}) {
     throw UnimplementedError();
   }
 
@@ -264,22 +260,12 @@ class _FakeAppService implements AppService {
   Future<void> stopProxy() async {}
 
   @override
-  Future<void> applyCodexInitStep(String stepId) {
+  Future<void> applyToolInitStep(ToolId id, String stepId) {
     throw UnimplementedError();
   }
 
   @override
-  Future<void> applyClaudeInitStep(String stepId) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<void> restoreOriginalConfig() {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<void> restoreClaudeConfig() {
+  Future<void> restoreToolConfig(ToolId id) {
     throw UnimplementedError();
   }
 }

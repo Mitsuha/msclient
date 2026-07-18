@@ -1,5 +1,5 @@
-import 'package:desktop/app/initialization/tool_initializer.dart';
 import 'package:desktop/app/models/app_snapshot.dart';
+import 'package:desktop/domain/tools/tool_initializer.dart';
 import 'package:desktop/features/settings/error_banner.dart';
 import 'package:desktop/features/settings/settings_rows.dart';
 import 'package:desktop/ui/app_colors.dart';

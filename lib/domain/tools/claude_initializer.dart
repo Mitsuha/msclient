@@ -1,4 +1,4 @@
-import 'package:desktop/app/initialization/tool_initializer.dart';
+import 'package:desktop/domain/tools/tool_initializer.dart';
 import 'package:desktop/system/claude_config_manager.dart';
 
 /// Step ids of the Claude Code initialization, in order.

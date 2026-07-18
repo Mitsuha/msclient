@@ -2,29 +2,38 @@ import 'dart:async';
 
 import 'package:desktop/app/app_exceptions.dart';
 import 'package:desktop/app/app_service.dart';
+import 'package:desktop/app/background_refresher.dart';
 import 'package:desktop/app/models/app_snapshot.dart';
 import 'package:desktop/app/models/billing_outcome.dart';
 import 'package:desktop/app/models/nav_section.dart';
 import 'package:desktop/core/api/api_client.dart';
 import 'package:desktop/core/logging/app_logger.dart';
+import 'package:desktop/core/utils/serial_queue.dart';
+import 'package:desktop/domain/tools/tool.dart';
 import 'package:flutter/foundation.dart';
 
 class AppViewModel extends ChangeNotifier {
   AppViewModel({required AppService service, required AppLogger logger})
     : this._(service, logger);
 
-  AppViewModel._(this._service, this._logger);
+  AppViewModel._(this._service, this._logger) {
+    _refresher = BackgroundRefresher(
+      onRefresh: _autoRefresh,
+      onRotateAccounts: _autoSwitch,
+    );
+  }
 
   final AppService _service;
   final AppLogger _logger;
 
-  /// How often the snapshot is silently refreshed while signed in.
-  static const _autoRefreshInterval = Duration(seconds: 30);
+  /// Serializes every snapshot-mutating operation — foreground actions and the
+  /// background ticks — so they never overlap or race over [_snapshot]. A
+  /// background tick simply skips itself while the queue is busy.
+  final SerialQueue _queue = SerialQueue();
 
-  /// How often each initialized tool silently rotates its account while signed
-  /// in. Cheap on the server side: when the current account is still usable the
-  /// backend just returns it unchanged.
-  static const _autoSwitchInterval = Duration(minutes: 1);
+  /// The two background jobs (30s refresh, 60s account rotation); only running
+  /// while authenticated.
+  late final BackgroundRefresher _refresher;
 
   AppSnapshot? _snapshot;
   NavSection _selectedSection = NavSection.dashboard;
@@ -34,19 +43,6 @@ class AppViewModel extends ChangeNotifier {
   bool _isLoggingIn = false;
   String? _errorMessage;
   String? _loginErrorMessage;
-
-  /// Periodic background refresh; only runs while authenticated.
-  Timer? _autoRefreshTimer;
-
-  /// Periodic background account rotation; only runs while authenticated.
-  Timer? _autoSwitchTimer;
-
-  /// True while a silent auto-refresh is in flight, so ticks never overlap.
-  bool _isAutoRefreshing = false;
-
-  /// True while a silent auto-switch is in flight, so ticks never overlap and
-  /// never race the auto-refresh over [_snapshot].
-  bool _isAutoSwitching = false;
 
   AppSnapshot? get snapshot => _snapshot;
   NavSection get selectedSection => _selectedSection;
@@ -79,7 +75,7 @@ class AppViewModel extends ChangeNotifier {
 
     if (_isAuthenticated) {
       await load();
-      _startAutoRefresh();
+      _refresher.start();
     }
   }
 
@@ -95,7 +91,7 @@ class AppViewModel extends ChangeNotifier {
   /// Tears down background work and stops the local proxy. Call before the app
   /// really quits (the tray "退出" item / a forced destroy).
   Future<void> shutdown() async {
-    _stopAutoRefresh();
+    _refresher.stop();
     await _service.stripToolProxyConfig();
     await _service.stopProxy();
   }
@@ -104,7 +100,7 @@ class AppViewModel extends ChangeNotifier {
     if (!_isAuthenticated) {
       return;
     }
-    await _run(() => _service.loadSnapshot());
+    await _run(_service.loadSnapshot);
   }
 
   Future<void> refresh() => load();
@@ -119,22 +115,12 @@ class AppViewModel extends ChangeNotifier {
 
   /// Applies the chosen billing method to Codex by rewriting its credentials.
   /// [userPackId] is 0 for pay-as-you-go (按量计费) or a subscription pack id.
-  Future<BillingOutcome> applyCodexBilling(int userPackId) {
-    return _applyBilling(() async {
-      await _service.initializeLocalProxyEnv(userPackId: userPackId);
-      return _service.loadSnapshot();
-    });
-  }
+  Future<BillingOutcome> applyCodexBilling(int userPackId) =>
+      _applyBilling(ToolId.codex, userPackId);
 
-  /// Applies the chosen billing method to Claude Code by rewriting its
-  /// credentials. [userPackId] is 0 for pay-as-you-go (按量计费) or a
-  /// subscription pack id.
-  Future<BillingOutcome> applyClaudeBilling(int userPackId) {
-    return _applyBilling(() async {
-      await _service.initializeClaude(userPackId: userPackId);
-      return _service.loadSnapshot();
-    });
-  }
+  /// Applies the chosen billing method to Claude Code. See [applyCodexBilling].
+  Future<BillingOutcome> applyClaudeBilling(int userPackId) =>
+      _applyBilling(ToolId.claude, userPackId);
 
   /// Persists the chosen node and switches sing-box's selector to it.
   Future<void> selectProxy(String url) async {
@@ -145,21 +131,12 @@ class AppViewModel extends ChangeNotifier {
   }
 
   /// Re-applies a single Codex initialization step from the settings page.
-  Future<void> applyCodexInitStep(String stepId) async {
-    await _run(() async {
-      await _service.applyCodexInitStep(stepId);
-      return _service.loadSnapshot();
-    });
-  }
+  Future<void> applyCodexInitStep(String stepId) =>
+      _applyInitStep(ToolId.codex, stepId);
 
-  /// Re-applies a single Claude Code initialization step from the settings
-  /// page.
-  Future<void> applyClaudeInitStep(String stepId) async {
-    await _run(() async {
-      await _service.applyClaudeInitStep(stepId);
-      return _service.loadSnapshot();
-    });
-  }
+  /// Re-applies a single Claude Code initialization step from the settings page.
+  Future<void> applyClaudeInitStep(String stepId) =>
+      _applyInitStep(ToolId.claude, stepId);
 
   /// Clears the MirrorStages proxy configuration from the local tool configs
   /// (Claude Code `settings.json` proxy entries, Codex `.env`).
@@ -170,23 +147,27 @@ class AppViewModel extends ChangeNotifier {
     });
   }
 
-  Future<void> restoreCodexConfig() async {
-    await _run(() async {
-      await _service.restoreOriginalConfig();
-      return _service.loadSnapshot();
-    });
-  }
+  Future<void> restoreCodexConfig() => _restoreToolConfig(ToolId.codex);
 
-  Future<void> restoreClaudeConfig() async {
-    await _run(() async {
-      await _service.restoreClaudeConfig();
-      return _service.loadSnapshot();
-    });
-  }
+  Future<void> restoreClaudeConfig() => _restoreToolConfig(ToolId.claude);
 
   Future<void> installRootCertificate() async {
     await _run(() async {
       await _service.installRootCertificate();
+      return _service.loadSnapshot();
+    });
+  }
+
+  Future<void> _applyInitStep(ToolId id, String stepId) async {
+    await _run(() async {
+      await _service.applyToolInitStep(id, stepId);
+      return _service.loadSnapshot();
+    });
+  }
+
+  Future<void> _restoreToolConfig(ToolId id) async {
+    await _run(() async {
+      await _service.restoreToolConfig(id);
       return _service.loadSnapshot();
     });
   }
@@ -210,7 +191,7 @@ class AppViewModel extends ChangeNotifier {
       _isAuthenticated = true;
       _snapshot = null;
       await load();
-      _startAutoRefresh();
+      _refresher.start();
     } on ApiException catch (error) {
       _loginErrorMessage = _loginMessageFor(error);
     } catch (error, stackTrace) {
@@ -229,7 +210,7 @@ class AppViewModel extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    _stopAutoRefresh();
+    _refresher.stop();
     await _service.logout();
     _snapshot = null;
     _isAuthenticated = false;
@@ -246,20 +227,19 @@ class AppViewModel extends ChangeNotifier {
   /// [BillingOutcome] so the card can react per-case. An empty account pool
   /// (`no_available_account`) is surfaced by the caller as a dedicated dialog,
   /// so it is *not* raised into [errorMessage]; every other failure still is.
-  Future<BillingOutcome> _applyBilling(
-    Future<AppSnapshot> Function() action,
-  ) async {
+  Future<BillingOutcome> _applyBilling(ToolId id, int userPackId) async {
     _isWorking = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      _snapshot = await action();
+      _snapshot = await _queue.run(() async {
+        await _service.initializeTool(id, userPackId: userPackId);
+        return _service.loadSnapshot();
+      });
       return BillingOutcome.success;
     } on UnauthenticatedException {
-      _stopAutoRefresh();
-      _isAuthenticated = false;
-      _snapshot = null;
+      _handleSignedOut();
       return BillingOutcome.failed;
     } on ApiException catch (error) {
       if (error.error == 'api.error.no_available_account') {
@@ -276,8 +256,9 @@ class AppViewModel extends ChangeNotifier {
     }
   }
 
-  /// Runs [action] with the working flag raised, capturing failures into
-  /// [errorMessage]. Returns true when [action] completed without error.
+  /// Runs [action] on the serial queue with the working flag raised, capturing
+  /// failures into [errorMessage]. Returns true when [action] completed without
+  /// error.
   Future<bool> _run(Future<AppSnapshot> Function() action) async {
     _isWorking = true;
     _errorMessage = null;
@@ -285,12 +266,10 @@ class AppViewModel extends ChangeNotifier {
 
     var succeeded = false;
     try {
-      _snapshot = await action();
+      _snapshot = await _queue.run(action);
       succeeded = true;
     } on UnauthenticatedException {
-      _stopAutoRefresh();
-      _isAuthenticated = false;
-      _snapshot = null;
+      _handleSignedOut();
     } catch (error) {
       _errorMessage = error.toString();
     } finally {
@@ -300,101 +279,72 @@ class AppViewModel extends ChangeNotifier {
     return succeeded;
   }
 
-  void _startAutoRefresh() {
-    _autoRefreshTimer?.cancel();
-    _autoRefreshTimer = Timer.periodic(
-      _autoRefreshInterval,
-      (_) => _autoRefresh(),
-    );
-    _autoSwitchTimer?.cancel();
-    _autoSwitchTimer = Timer.periodic(
-      _autoSwitchInterval,
-      (_) => _autoSwitch(),
-    );
-  }
-
-  void _stopAutoRefresh() {
-    _autoRefreshTimer?.cancel();
-    _autoRefreshTimer = null;
-    _autoSwitchTimer?.cancel();
-    _autoSwitchTimer = null;
-  }
-
-  /// Reloads the snapshot in the background without raising the working flag,
-  /// so the periodic refresh never flashes spinners or disables controls. Ticks
-  /// are skipped while a foreground action or a previous tick is still running.
+  /// Reloads the snapshot in the background without raising the working flag, so
+  /// the periodic refresh never flashes spinners or disables controls. Skipped
+  /// while a foreground action or another queued job is still running.
   Future<void> _autoRefresh() async {
-    if (!_isAuthenticated ||
-        _isWorking ||
-        _isAutoRefreshing ||
-        _isAutoSwitching) {
+    if (!_isAuthenticated || _queue.isBusy) {
       return;
     }
-    _isAutoRefreshing = true;
     try {
-      _snapshot = await _service.loadSnapshot();
+      _snapshot = await _queue.run(_service.loadSnapshot);
       _errorMessage = null;
       notifyListeners();
     } on UnauthenticatedException {
-      _stopAutoRefresh();
-      _isAuthenticated = false;
-      _snapshot = null;
+      _handleSignedOut();
       notifyListeners();
     } catch (_) {
       // Transient failure: keep the last good snapshot and try again next tick.
-    } finally {
-      _isAutoRefreshing = false;
     }
   }
 
   /// Silently rotates the account of every *initialized* tool, reusing the pack
-  /// its current credentials are billed against (0 = pay-as-you-go / 按量计费,
-  /// i.e. no pack). Runs without raising the working flag, so it never flashes
-  /// spinners; ticks are skipped while a foreground action, an auto-refresh, or
-  /// a previous tick is still running. A tool that isn't initialized is left
-  /// untouched — only initialized tools may auto-switch.
+  /// its current credentials are billed against (0 = pay-as-you-go / 按量计费).
+  /// Runs without raising the working flag, so it never flashes spinners;
+  /// skipped while any other queued job is running. A tool that isn't
+  /// initialized is left untouched.
   Future<void> _autoSwitch() async {
     final snapshot = _snapshot;
-    if (!_isAuthenticated ||
-        _isWorking ||
-        _isAutoRefreshing ||
-        _isAutoSwitching ||
-        snapshot == null) {
+    if (!_isAuthenticated || _queue.isBusy || snapshot == null) {
       return;
     }
-    if (!snapshot.codex.isInitialized && !snapshot.claude.isInitialized) {
+    final initialized = ToolId.values
+        .where((id) => snapshot.statusFor(id).isInitialized)
+        .toList();
+    if (initialized.isEmpty) {
       return;
     }
-    _isAutoSwitching = true;
     try {
-      if (snapshot.codex.isInitialized) {
-        await _service.initializeLocalProxyEnv(
-          userPackId: snapshot.codex.account?.userPackId ?? 0,
-        );
-      }
-      if (snapshot.claude.isInitialized) {
-        await _service.initializeClaude(
-          userPackId: snapshot.claude.account?.userPackId ?? 0,
-        );
-      }
-      _snapshot = await _service.loadSnapshot();
+      _snapshot = await _queue.run(() async {
+        for (final id in initialized) {
+          await _service.initializeTool(
+            id,
+            userPackId: snapshot.statusFor(id).account?.userPackId ?? 0,
+          );
+        }
+        return _service.loadSnapshot();
+      });
       notifyListeners();
     } on UnauthenticatedException {
-      _stopAutoRefresh();
-      _isAuthenticated = false;
-      _snapshot = null;
+      _handleSignedOut();
       notifyListeners();
     } catch (_) {
       // Best-effort rotation (e.g. an empty account pool): keep the last good
       // snapshot and try again next tick.
-    } finally {
-      _isAutoSwitching = false;
     }
+  }
+
+  /// Common reaction to a 401 mid-operation: stop background work and drop to
+  /// the login screen.
+  void _handleSignedOut() {
+    _refresher.stop();
+    _isAuthenticated = false;
+    _snapshot = null;
   }
 
   @override
   void dispose() {
-    _stopAutoRefresh();
+    _refresher.dispose();
     super.dispose();
   }
 

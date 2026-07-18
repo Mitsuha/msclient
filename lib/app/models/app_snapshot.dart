@@ -1,8 +1,9 @@
-import 'package:desktop/app/initialization/tool_initializer.dart';
 import 'package:desktop/app/models/account_summary.dart';
 import 'package:desktop/app/models/local_status.dart';
 import 'package:desktop/app/models/tool_status.dart';
 import 'package:desktop/data/models/client_proxy_models.dart';
+import 'package:desktop/domain/tools/tool.dart';
+import 'package:desktop/domain/tools/tool_initializer.dart';
 import 'package:desktop/system/process_inspector.dart';
 
 /// Health of the global runtime environment MirrorStages depends on: no
@@ -60,4 +61,11 @@ class AppSnapshot {
   final String? message;
 
   bool get isBusy => environment == EnvironmentStatus.loading;
+
+  /// The status of the tool identified by [id], so callers can treat the tools
+  /// uniformly instead of branching on the named [codex] / [claude] fields.
+  ToolStatus statusFor(ToolId id) => switch (id) {
+    ToolId.codex => codex,
+    ToolId.claude => claude,
+  };
 }

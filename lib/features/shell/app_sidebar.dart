@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:desktop/app/models/account_summary.dart';
 import 'package:desktop/app/models/nav_section.dart';
 import 'package:desktop/features/shell/account_menu.dart';
+import 'package:desktop/features/shell/contact_support_item.dart';
 import 'package:desktop/ui/app_colors.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:window_manager/window_manager.dart';
@@ -63,6 +64,8 @@ class AppSidebar extends StatelessWidget {
             onPressed: () => onSelectSection(NavSection.settings),
           ),
           const Spacer(),
+          const ContactSupportItem(),
+          const SizedBox(height: 6),
           if (account != null)
             AccountMenu(
               account: account!,

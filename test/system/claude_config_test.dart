@@ -218,6 +218,42 @@ void main() {
       expect(settings['model'], 'opus[1m]');
     });
   });
+
+  group('hasProxySettings', () {
+    late Directory home;
+    late ClaudeConfigManager config;
+
+    setUp(() async {
+      home = await Directory.systemTemp.createTemp('claude-proxy-check-test');
+      config = ClaudeConfigManager(home: _FakeHome(home.path));
+    });
+
+    tearDown(() => home.delete(recursive: true));
+
+    Future<void> writeEnv(Map<String, dynamic> env) async {
+      final file = File('${home.path}/.claude/settings.json');
+      await file.parent.create(recursive: true);
+      await file.writeAsString(jsonEncode({'env': env}));
+    }
+
+    test('true only when both proxies equal the local sing-box url', () async {
+      await config.writeProxySettings('http://127.0.0.1:18610');
+      expect(await config.hasProxySettings(), isTrue);
+    });
+
+    test('false for a stale proxy address (not just non-empty)', () async {
+      await writeEnv({
+        'HTTPS_PROXY': 'https://old.example.com:5211',
+        'HTTP_PROXY': 'https://old.example.com:5211',
+      });
+      expect(await config.hasProxySettings(), isFalse);
+    });
+
+    test('false when the proxy entries are missing', () async {
+      await writeEnv({'FOO': 'bar'});
+      expect(await config.hasProxySettings(), isFalse);
+    });
+  });
 }
 
 class _FakeHome extends HomeDirectory {
