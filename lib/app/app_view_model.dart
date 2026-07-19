@@ -55,6 +55,11 @@ class AppViewModel extends ChangeNotifier {
   String? get loginErrorMessage => _loginErrorMessage;
 
   Future<void> bootstrap() async {
+    // First launch only: detect a running local HTTP proxy and seed the
+    // network-proxy setting with it. Awaited before startProxy so the very first
+    // sing-box config already honors it; the probe times out fast.
+    await _service.autofillNetworkProxyOnFirstLaunch();
+
     // Launch the local proxy in the background; first run may download the
     // sing-box binary, so this must not block the login UI.
     final proxyStartup = _service.startProxy();
@@ -126,6 +131,15 @@ class AppViewModel extends ChangeNotifier {
   Future<void> selectProxy(String url) async {
     await _run(() async {
       await _service.selectProxy(url);
+      return _service.loadSnapshot();
+    });
+  }
+
+  /// Persists the upstream network proxy (empty clears it) and rebuilds the
+  /// sing-box config so direct traffic routes through it.
+  Future<void> setNetworkProxy(String url) async {
+    await _run(() async {
+      await _service.setNetworkProxy(url);
       return _service.loadSnapshot();
     });
   }
@@ -221,6 +235,10 @@ class AppViewModel extends ChangeNotifier {
 
   Future<void> openAdminConsole() async {
     await _service.openAdminConsole();
+  }
+
+  Future<void> openRegister() async {
+    await _service.openRegister();
   }
 
   /// Runs a billing re-allocation like [_run], but reports its outcome as a

@@ -141,8 +141,14 @@ class AppUpdater {
       return;
     }
     if (Platform.isWindows) {
-      await Process.start('msiexec.exe', [
-        '/i',
+      // Launch the .msi the same way double-clicking it does, so the Windows
+      // shell drives the install (and its UAC elevation) instead of us spawning
+      // msiexec directly from a non-elevated process. `start` is a cmd builtin,
+      // so it must run through cmd; the empty "" is start's title argument.
+      await Process.start('cmd', [
+        '/c',
+        'start',
+        '',
         path,
       ], mode: ProcessStartMode.detached);
       return;

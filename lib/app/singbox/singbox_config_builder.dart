@@ -45,6 +45,7 @@ class SingboxConfigBuilder {
   static const httpInboundTag = 'default-http';
   static const selectorTag = 'default-selector';
   static const directTag = 'direct';
+  static const networkProxyTag = 'network-proxy';
 
   /// Only these domains (and subdomains) are forwarded through the selector;
   /// everything else is dialed directly.
@@ -58,7 +59,15 @@ class SingboxConfigBuilder {
     'platform.claude.com',
   ];
 
-  SingboxConfig build(List<ClientProxyOption> proxies, {String? selectedUrl}) {
+  /// [networkProxyUrl] is the optional upstream HTTP proxy for the traffic that
+  /// otherwise dials out directly (everything not on [proxyDomains]). When it
+  /// parses to a usable http(s) URL, `route.final` is pointed at a dedicated
+  /// outbound to it instead of `direct`; otherwise the fallback stays `direct`.
+  SingboxConfig build(
+    List<ClientProxyOption> proxies, {
+    String? selectedUrl,
+    String? networkProxyUrl,
+  }) {
     final tags = <String>[];
     final outbounds = <Map<String, dynamic>>[];
     final signature = <String>[];
@@ -97,6 +106,23 @@ class SingboxConfigBuilder {
     });
     outbounds.add({'type': 'direct', 'tag': directTag});
 
+    // The fallback for non-whitelisted traffic: an upstream HTTP proxy when one
+    // is configured, otherwise the plain `direct` outbound.
+    final networkProxy = _networkProxyOutbound(networkProxyUrl);
+    if (networkProxy != null) {
+      outbounds.add(networkProxy);
+    }
+    final finalTag = networkProxy == null ? directTag : networkProxyTag;
+    // Fold the fallback into the signature so a change to it (on/off or a
+    // different server) forces a relaunch; the per-proxy outbounds alone would
+    // otherwise look unchanged.
+    signature.add(
+      networkProxy == null
+          ? 'final|$directTag'
+          : 'final|$networkProxyTag|${networkProxy['server']}'
+                '|${networkProxy['server_port']}',
+    );
+
     final json = <String, dynamic>{
       'log': {'level': 'info'},
       'experimental': {
@@ -122,7 +148,7 @@ class SingboxConfigBuilder {
             'outbound': selectorTag,
           },
         ],
-        'final': directTag,
+        'final': finalTag,
       },
     };
 
@@ -131,6 +157,42 @@ class SingboxConfigBuilder {
       defaultTag: defaultTag,
       outboundSignature: signature,
     );
+  }
+
+  /// Whether [url] is a usable upstream network-proxy address: a non-empty
+  /// http(s) URL with a host. The settings UI validates against this, and the
+  /// builder uses it to decide whether to route the fallback through it — one
+  /// source of truth so the UI never accepts what the config would silently drop.
+  static bool isValidNetworkProxyUrl(String url) {
+    final raw = url.trim();
+    if (raw.isEmpty) {
+      return false;
+    }
+    final uri = Uri.tryParse(raw);
+    return uri != null &&
+        (uri.scheme == 'http' || uri.scheme == 'https') &&
+        uri.host.isNotEmpty;
+  }
+
+  /// The upstream HTTP proxy outbound for [networkProxyUrl], or null when it is
+  /// empty or not a valid http(s) URL (in which case the caller keeps `direct`
+  /// as the fallback). Parsing mirrors the per-proxy outbounds: `https` ⇒ TLS,
+  /// an explicit port wins else 443/80 by scheme.
+  Map<String, dynamic>? _networkProxyOutbound(String? networkProxyUrl) {
+    final raw = networkProxyUrl?.trim();
+    if (raw == null || !isValidNetworkProxyUrl(raw)) {
+      return null;
+    }
+    final uri = Uri.parse(raw);
+    final overTls = uri.scheme == 'https';
+    final port = uri.hasPort ? uri.port : (overTls ? 443 : 80);
+    return {
+      'type': 'http',
+      'tag': networkProxyTag,
+      'server': uri.host,
+      'server_port': port,
+      'tls': {'enabled': overTls},
+    };
   }
 
   /// A non-empty, unique outbound tag derived from the node name (or its host

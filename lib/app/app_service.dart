@@ -18,6 +18,7 @@ import 'package:desktop/data/api/singbox_clash_api.dart';
 import 'package:desktop/data/api/tool_auth_api.dart';
 import 'package:desktop/data/api/user_pack_api.dart';
 import 'package:desktop/data/models/account_models.dart';
+import 'package:desktop/data/preferences/network_proxy_store.dart';
 import 'package:desktop/data/preferences/proxy_preference_store.dart';
 import 'package:desktop/data/session/session_store.dart';
 import 'package:desktop/domain/tools/claude_tool.dart';
@@ -111,6 +112,7 @@ class AppService {
         ),
         configApi: DesktopConfigApi(client),
         preferences: const ProxyPreferenceStore(),
+        networkProxy: const NetworkProxyStore(),
       ),
       tools: tools,
     );
@@ -137,6 +139,15 @@ class AppService {
   /// Stops the local proxy. Call on app shutdown.
   Future<void> stopProxy() => _proxy.stop();
 
+  /// Persists the upstream network proxy (empty clears it) and rebuilds the
+  /// sing-box config so direct traffic routes through it.
+  Future<void> setNetworkProxy(String url) => _proxy.setNetworkProxy(url);
+
+  /// First-launch only: auto-detects a local HTTP proxy and seeds the
+  /// network-proxy setting with it. Best-effort; runs once.
+  Future<void> autofillNetworkProxyOnFirstLaunch() =>
+      _proxy.autofillNetworkProxyOnFirstLaunch();
+
   // --- Session ---
 
   Future<bool> hasSession() async => await _sessionStore.load() != null;
@@ -159,6 +170,8 @@ class AppService {
   Future<void> logout() => _sessionStore.clear();
 
   Future<void> openAdminConsole() => _browser.open(AppConfig.adminConsoleUrl);
+
+  Future<void> openRegister() => _browser.open(AppConfig.registerUrl);
 
   Future<void> installRootCertificate() => _rootCertificate.install();
 
@@ -277,6 +290,7 @@ class AppService {
         conflicts: conflicts,
         proxyOptions: proxyState.options,
         selectedProxyUrl: proxyState.selectedUrl,
+        networkProxyUrl: proxyState.networkProxyUrl,
         codexInitSteps: tools.steps[ToolId.codex]!,
         claudeInitSteps: tools.steps[ToolId.claude]!,
         isProxyRunning: proxyRunning,
@@ -325,6 +339,7 @@ class AppService {
       localConfiguration: localConfiguration,
       proxyOptions: proxyState.options,
       selectedProxyUrl: proxyState.selectedUrl,
+      networkProxyUrl: proxyState.networkProxyUrl,
       codexInitSteps: tools.steps[ToolId.codex]!,
       claudeInitSteps: tools.steps[ToolId.claude]!,
       isProxyRunning: isProxyRunning,

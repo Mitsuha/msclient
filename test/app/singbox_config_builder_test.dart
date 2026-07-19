@@ -144,4 +144,99 @@ void main() {
     expect(a.outboundSignature, sameSetDifferentSelection.outboundSignature);
     expect(a.outboundSignature, isNot(differentSet.outboundSignature));
   });
+
+  Map<String, dynamic>? networkProxyOf(SingboxConfig config) =>
+      (config.json['outbounds'] as List)
+          .cast<Map<String, dynamic>>()
+          .where((o) => o['tag'] == SingboxConfigBuilder.networkProxyTag)
+          .cast<Map<String, dynamic>?>()
+          .firstWhere((_) => true, orElse: () => null);
+
+  test('no network proxy keeps the final fallback as direct', () {
+    final config = builder.build([
+      option('msc-1', 'https://a.example.com:5211'),
+    ]);
+
+    expect(
+      (config.json['route'] as Map)['final'],
+      SingboxConfigBuilder.directTag,
+    );
+    expect(networkProxyOf(config), isNull);
+  });
+
+  test('a network proxy routes the final fallback through it', () {
+    final config = builder.build([
+      option('msc-1', 'https://a.example.com:5211'),
+    ], networkProxyUrl: 'http://127.0.0.1:7890');
+
+    final network = networkProxyOf(config)!;
+    expect(network['type'], 'http');
+    expect(network['server'], '127.0.0.1');
+    expect(network['server_port'], 7890);
+    expect((network['tls'] as Map)['enabled'], isFalse);
+    expect(
+      (config.json['route'] as Map)['final'],
+      SingboxConfigBuilder.networkProxyTag,
+    );
+
+    // The whitelist rule still points at the selector (only direct traffic
+    // moves to the upstream proxy).
+    final rule = ((config.json['route'] as Map)['rules'] as List).single as Map;
+    expect(rule['outbound'], SingboxConfigBuilder.selectorTag);
+  });
+
+  test('a blank or unparseable network proxy falls back to direct', () {
+    for (final value in ['', '   ', 'not a url', 'ftp://x']) {
+      final config = builder.build([
+        option('msc-1', 'https://a.example.com:5211'),
+      ], networkProxyUrl: value);
+      expect(
+        (config.json['route'] as Map)['final'],
+        SingboxConfigBuilder.directTag,
+        reason: 'value "$value" should not enable the upstream proxy',
+      );
+      expect(networkProxyOf(config), isNull);
+    }
+  });
+
+  test('the network proxy is part of the signature', () {
+    final none = builder.build([option('msc-1', 'https://a.example.com:5211')]);
+    final withProxy = builder.build([
+      option('msc-1', 'https://a.example.com:5211'),
+    ], networkProxyUrl: 'http://127.0.0.1:7890');
+    final differentProxy = builder.build([
+      option('msc-1', 'https://a.example.com:5211'),
+    ], networkProxyUrl: 'http://127.0.0.1:1080');
+
+    expect(none.outboundSignature, isNot(withProxy.outboundSignature));
+    expect(
+      withProxy.outboundSignature,
+      isNot(differentProxy.outboundSignature),
+    );
+  });
+
+  test('isValidNetworkProxyUrl accepts http(s) urls with a host only', () {
+    expect(
+      SingboxConfigBuilder.isValidNetworkProxyUrl('http://127.0.0.1:7890'),
+      isTrue,
+    );
+    expect(
+      SingboxConfigBuilder.isValidNetworkProxyUrl('https://proxy.example.com'),
+      isTrue,
+    );
+    expect(
+      SingboxConfigBuilder.isValidNetworkProxyUrl('  http://127.0.0.1:7890  '),
+      isTrue,
+    );
+
+    expect(SingboxConfigBuilder.isValidNetworkProxyUrl(''), isFalse);
+    expect(SingboxConfigBuilder.isValidNetworkProxyUrl('   '), isFalse);
+    expect(
+      SingboxConfigBuilder.isValidNetworkProxyUrl('127.0.0.1:7890'),
+      isFalse,
+    );
+    expect(SingboxConfigBuilder.isValidNetworkProxyUrl('ftp://x.com'), isFalse);
+    expect(SingboxConfigBuilder.isValidNetworkProxyUrl('http://'), isFalse);
+    expect(SingboxConfigBuilder.isValidNetworkProxyUrl('not a url'), isFalse);
+  });
 }

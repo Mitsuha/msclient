@@ -58,8 +58,14 @@ class SingboxController {
   /// Reconciles sing-box against [proxies]/[selectedUrl]: launches it on first
   /// call, restarts it when the node set changed, or just flips the selector
   /// when only the selection changed. Idempotent; serialized internally.
-  Future<void> apply(List<ClientProxyOption> proxies, {String? selectedUrl}) {
-    final run = _reconciling.then((_) => _apply(proxies, selectedUrl));
+  Future<void> apply(
+    List<ClientProxyOption> proxies, {
+    String? selectedUrl,
+    String? networkProxyUrl,
+  }) {
+    final run = _reconciling.then(
+      (_) => _apply(proxies, selectedUrl, networkProxyUrl),
+    );
     _reconciling = run.catchError((_) {});
     return run;
   }
@@ -67,11 +73,16 @@ class SingboxController {
   Future<void> _apply(
     List<ClientProxyOption> proxies,
     String? selectedUrl,
+    String? networkProxyUrl,
   ) async {
     if (_stopRequested || proxies.isEmpty) {
       return;
     }
-    final target = _builder.build(proxies, selectedUrl: selectedUrl);
+    final target = _builder.build(
+      proxies,
+      selectedUrl: selectedUrl,
+      networkProxyUrl: networkProxyUrl,
+    );
 
     final needRelaunch =
         !_apiReady ||

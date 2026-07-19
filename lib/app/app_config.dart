@@ -8,6 +8,8 @@ abstract final class AppConfig {
   static const String proxyUrl = 'https://api.mirrorstages.com:5211';
 
   static const String adminConsoleUrl = 'https://dashboard.mirrorstages.com';
+  static const String registerUrl =
+      'https://dashboard.mirrorstages.com/auth/register?utm_type=app';
   static const String rootCertificateAssetPath =
       'assets/ca/mirrorstages-root-ca.cer';
 

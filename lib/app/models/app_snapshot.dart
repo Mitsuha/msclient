@@ -30,6 +30,7 @@ class AppSnapshot {
     this.conflicts = const [],
     this.proxyOptions = const [],
     this.selectedProxyUrl,
+    this.networkProxyUrl,
     this.codexInitSteps = const [],
     this.claudeInitSteps = const [],
     this.isProxyRunning = false,
@@ -52,6 +53,10 @@ class AppSnapshot {
   /// default) and the url currently in effect for initialization.
   final List<ClientProxyOption> proxyOptions;
   final String? selectedProxyUrl;
+
+  /// The optional upstream HTTP proxy that fallback (direct) traffic is routed
+  /// through; null/empty means traffic dials out directly.
+  final String? networkProxyUrl;
 
   /// Per-step check results of each tool's initialization, in step order, so
   /// the settings page can verify and repair steps individually.

@@ -54,8 +54,8 @@ class _NoAvailableAccountDialog extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              '$toolName 的账号池暂时没有可分配的账号，请稍后重试。'
-              '若持续出现，请联系管理员。',
+              '$toolName 的账号池暂时没有可分配的账号，请联系客服补号。'
+              '通知后10分钟内就会有新的账号可用。',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,

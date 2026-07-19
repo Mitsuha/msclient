@@ -224,6 +224,9 @@ class _FakeAppService implements AppService {
   }
 
   @override
+  Future<void> openRegister() async {}
+
+  @override
   Future<void> installRootCertificate() {
     throw UnimplementedError();
   }
@@ -235,6 +238,12 @@ class _FakeAppService implements AppService {
 
   @override
   Future<void> selectProxy(String url) async {}
+
+  @override
+  Future<void> setNetworkProxy(String url) async {}
+
+  @override
+  Future<void> autofillNetworkProxyOnFirstLaunch() async {}
 
   @override
   Future<void> clearProxyConfig() {

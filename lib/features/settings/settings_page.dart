@@ -1,4 +1,5 @@
 import 'package:desktop/app/models/app_snapshot.dart';
+import 'package:desktop/app/singbox/singbox_config_builder.dart';
 import 'package:desktop/domain/tools/tool_initializer.dart';
 import 'package:desktop/features/settings/error_banner.dart';
 import 'package:desktop/features/settings/settings_rows.dart';
@@ -17,6 +18,7 @@ class SettingsPage extends StatelessWidget {
     required this.onRefresh,
     required this.onInstallRootCertificate,
     required this.onSelectProxy,
+    required this.onSetNetworkProxy,
     required this.onApplyCodexInitStep,
     required this.onApplyClaudeInitStep,
     required this.onRestoreCodexConfig,
@@ -32,6 +34,7 @@ class SettingsPage extends StatelessWidget {
   final VoidCallback onRefresh;
   final VoidCallback onInstallRootCertificate;
   final ValueChanged<String> onSelectProxy;
+  final ValueChanged<String> onSetNetworkProxy;
   final ValueChanged<String> onApplyCodexInitStep;
   final ValueChanged<String> onApplyClaudeInitStep;
   final VoidCallback onRestoreCodexConfig;
@@ -64,10 +67,20 @@ class SettingsPage extends StatelessWidget {
           const SizedBox(height: 18),
           SectionCard(
             title: '代理节点',
-            child: _ProxySettings(
-              snapshot: snapshot,
-              isWorking: isWorking,
-              onSelectProxy: onSelectProxy,
+            child: Column(
+              children: [
+                _ProxySettings(
+                  snapshot: snapshot,
+                  isWorking: isWorking,
+                  onSelectProxy: onSelectProxy,
+                ),
+                const RowDivider(),
+                _NetworkProxySettings(
+                  snapshot: snapshot,
+                  isWorking: isWorking,
+                  onSetNetworkProxy: onSetNetworkProxy,
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 18),
@@ -237,6 +250,167 @@ class _ProxySettings extends StatelessWidget {
                   }
                 },
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The "网络代理" row: an optional upstream HTTP proxy that traffic which
+/// otherwise dials out directly is routed through. Empty means direct.
+class _NetworkProxySettings extends StatefulWidget {
+  const _NetworkProxySettings({
+    required this.snapshot,
+    required this.isWorking,
+    required this.onSetNetworkProxy,
+  });
+
+  final AppSnapshot snapshot;
+  final bool isWorking;
+  final ValueChanged<String> onSetNetworkProxy;
+
+  @override
+  State<_NetworkProxySettings> createState() => _NetworkProxySettingsState();
+}
+
+class _NetworkProxySettingsState extends State<_NetworkProxySettings> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.snapshot.networkProxyUrl ?? '',
+  );
+  late final FocusNode _focusNode = FocusNode()..addListener(_onFocusChange);
+
+  /// True when the current text is a non-empty value that is not a valid
+  /// http(s) proxy URL; drives the red border and inline hint.
+  bool _invalid = false;
+
+  void _onFocusChange() {
+    // Commit when the field loses focus (tab away, click elsewhere).
+    if (!_focusNode.hasFocus) {
+      _submit();
+    }
+  }
+
+  @override
+  void didUpdateWidget(_NetworkProxySettings oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reflect an externally-changed value (e.g. first-launch autofill or a
+    // background refresh) without clobbering what the user is mid-typing.
+    final incoming = widget.snapshot.networkProxyUrl ?? '';
+    if (incoming != (oldWidget.snapshot.networkProxyUrl ?? '') &&
+        incoming != _controller.text) {
+      _controller.text = incoming;
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_onFocusChange);
+    _focusNode.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = _controller.text.trim();
+    // Empty clears the setting (back to direct). A non-empty value must be a
+    // valid http(s) URL; otherwise flag it and refuse to persist, so the config
+    // never silently drops an address the user believes is in effect.
+    if (value.isNotEmpty &&
+        !SingboxConfigBuilder.isValidNetworkProxyUrl(value)) {
+      if (!_invalid) {
+        setState(() => _invalid = true);
+      }
+      return;
+    }
+    if (_invalid) {
+      setState(() => _invalid = false);
+    }
+    if (value != (widget.snapshot.networkProxyUrl ?? '')) {
+      widget.onSetNetworkProxy(value);
+    }
+  }
+
+  void _onChanged(String _) {
+    // Clear the error as soon as the user starts fixing it.
+    if (_invalid) {
+      setState(() => _invalid = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // A plain white field with a grey border so it reads as editable; the
+    // border turns red when the value is invalid.
+    final fieldDecoration = BoxDecoration(
+      color: CupertinoColors.white,
+      border: Border.all(
+        color: _invalid ? AppColors.red : AppColors.strongBorder,
+      ),
+      borderRadius: BorderRadius.circular(8),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '网络代理',
+                  style: TextStyle(
+                    color: AppColors.label,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  '让自动更新、插件市场之类没有被 Ms 接管的请求走这个代理，为空则直连',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppColors.tertiaryLabel,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          SizedBox(
+            width: 190,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CupertinoTextField(
+                  controller: _controller,
+                  focusNode: _focusNode,
+                  enabled: !widget.isWorking,
+                  placeholder: 'http://127.0.0.1:7890',
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                  keyboardType: TextInputType.url,
+                  autocorrect: false,
+                  decoration: fieldDecoration,
+                  onChanged: _onChanged,
+                  onSubmitted: (_) => _submit(),
+                ),
+                if (_invalid) ...[
+                  const SizedBox(height: 4),
+                  const Text(
+                    '请输入合法的 http(s) 代理地址',
+                    style: TextStyle(color: AppColors.red, fontSize: 11),
+                  ),
+                ],
+              ],
             ),
           ),
         ],

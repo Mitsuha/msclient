@@ -58,6 +58,7 @@ class AppShell extends StatelessWidget {
                           onInstallRootCertificate:
                               viewModel.installRootCertificate,
                           onSelectProxy: viewModel.selectProxy,
+                          onSetNetworkProxy: viewModel.setNetworkProxy,
                           onApplyCodexInitStep: viewModel.applyCodexInitStep,
                           onApplyClaudeInitStep: viewModel.applyClaudeInitStep,
                           onRestoreCodexConfig: viewModel.restoreCodexConfig,
@@ -78,6 +79,7 @@ class AppShell extends StatelessWidget {
             isLoading: viewModel.isLoggingIn,
             errorMessage: viewModel.loginErrorMessage,
             onLogin: viewModel.login,
+            onRegister: viewModel.openRegister,
             onExit: onExit,
           ),
       ],

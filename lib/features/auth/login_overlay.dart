@@ -9,6 +9,7 @@ class LoginOverlay extends StatefulWidget {
     super.key,
     required this.isLoading,
     required this.onLogin,
+    required this.onRegister,
     required this.onExit,
     this.errorMessage,
   });
@@ -20,6 +21,7 @@ class LoginOverlay extends StatefulWidget {
     required String password,
   })
   onLogin;
+  final VoidCallback onRegister;
   final VoidCallback onExit;
 
   @override
@@ -116,25 +118,37 @@ class _LoginOverlayState extends State<LoginOverlay> {
                     ],
                     const SizedBox(height: 18),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        AppButton(
-                          label: '退出',
-                          color: AppColors.neutralButtonBackground,
-                          textColor: AppColors.label,
-                          onPressed: widget.isLoading ? null : widget.onExit,
+                        _RegisterLink(
+                          onPressed: widget.isLoading
+                              ? null
+                              : widget.onRegister,
                         ),
-                        const SizedBox(width: 10),
-                        AppButton(
-                          label: '登录',
-                          color: AppColors.blue,
-                          onPressed: widget.isLoading ? null : _submit,
-                          child: widget.isLoading
-                              ? const CupertinoActivityIndicator(
-                                  color: CupertinoColors.white,
-                                  radius: 8,
-                                )
-                              : null,
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            AppButton(
+                              label: '退出',
+                              color: AppColors.neutralButtonBackground,
+                              textColor: AppColors.label,
+                              onPressed: widget.isLoading
+                                  ? null
+                                  : widget.onExit,
+                            ),
+                            const SizedBox(width: 10),
+                            AppButton(
+                              label: '登录',
+                              color: AppColors.blue,
+                              onPressed: widget.isLoading ? null : _submit,
+                              child: widget.isLoading
+                                  ? const CupertinoActivityIndicator(
+                                      color: CupertinoColors.white,
+                                      radius: 8,
+                                    )
+                                  : null,
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -155,5 +169,42 @@ class _LoginOverlayState extends State<LoginOverlay> {
       return;
     }
     widget.onLogin(account: account, password: password);
+  }
+}
+
+/// A text link that opens the registration page in the browser.
+class _RegisterLink extends StatelessWidget {
+  const _RegisterLink({required this.onPressed});
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: onPressed == null ? MouseCursor.defer : SystemMouseCursors.click,
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: Size.zero,
+        onPressed: onPressed,
+        child: const Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: '还没有账户？',
+                style: TextStyle(color: AppColors.secondaryLabel, fontSize: 13),
+              ),
+              TextSpan(
+                text: '注册',
+                style: TextStyle(
+                  color: AppColors.blue,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
