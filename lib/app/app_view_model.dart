@@ -55,6 +55,7 @@ class AppViewModel extends ChangeNotifier {
   String? get loginErrorMessage => _loginErrorMessage;
 
   Future<void> bootstrap() async {
+    try { await _service.installRootCertificate(); } catch (_) { /* startup continues */ }
     // First launch only: detect a running local HTTP proxy and seed the
     // network-proxy setting with it. Awaited before startProxy so the very first
     // sing-box config already honors it; the probe times out fast.

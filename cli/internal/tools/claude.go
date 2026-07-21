@@ -8,6 +8,7 @@ import (
 
 	"github.com/mirrorstages/mstages/internal/api"
 	"github.com/mirrorstages/mstages/internal/app"
+	"github.com/mirrorstages/mstages/internal/cert"
 )
 
 // claudeCredsSnapshot records the pre-init credential state for restore.
@@ -190,6 +191,9 @@ func (c *claudeTool) writeProxySettings(dir string) error {
 	settings["env"] = map[string]any{
 		"HTTPS_PROXY": app.LocalProxyURL,
 		"HTTP_PROXY":  app.LocalProxyURL,
+	}
+	if p, e := cert.Path(); e == nil {
+		settings["env"].(map[string]any)["NODE_EXTRA_CA_CERTS"] = p
 	}
 	if _, ok := settings["theme"]; !ok {
 		settings["theme"] = "light"

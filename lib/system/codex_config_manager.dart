@@ -50,7 +50,7 @@ class CodexConfigManager implements ToolConfigManager {
   Future<void> writeProxy(String proxyUrl) => writeProxyEnv(proxyUrl);
 
   @override
-  Future<void> stripProxy() => removeProxyEnv();
+  Future<void> stripProxy() => clearProxyEnv();
 
   @override
   Future<void> clearProxy() => clearProxyEnv();
@@ -96,7 +96,8 @@ class CodexConfigManager implements ToolConfigManager {
       }
       final env = parseEnvLines(await envFile.readAsLines());
       return env['http_proxy'] == AppConfig.singboxLocalProxyUrl &&
-          env['https_proxy'] == AppConfig.singboxLocalProxyUrl;
+          env['https_proxy'] == AppConfig.singboxLocalProxyUrl &&
+          env['SSL_CERT_FILE'] == '${await _home.resolve()}/.mstages/ms.cer';
     } catch (_) {
       return false;
     }
@@ -110,6 +111,7 @@ class CodexConfigManager implements ToolConfigManager {
     final env = await _readEnv(envFile);
     env['http_proxy'] = proxyUrl;
     env['https_proxy'] = proxyUrl;
+    env['SSL_CERT_FILE'] = '"${await _home.resolve()}/.mstages/ms.cer"';
     await envFile.writeAsString(serializeEnv(env));
   }
 
@@ -122,9 +124,10 @@ class CodexConfigManager implements ToolConfigManager {
     }
   }
 
-  /// Removes only `http_proxy` / `https_proxy` from `.env`, preserving any
-  /// other entries the user keeps in the file. Deletes the file if it becomes
-  /// empty. A missing file is a no-op.
+  /// Removes only Mirrorstages proxy/certificate entries from `.env`, preserving
+  /// other entries. This helper is retained for callers that explicitly need
+  /// variable-level cleanup; normal clear/exit cleanup deletes the file via
+  /// [clearProxyEnv].
   Future<void> removeProxyEnv() async {
     final envFile = File('${await directoryPath()}/.env');
     if (!await envFile.exists()) {
@@ -132,7 +135,8 @@ class CodexConfigManager implements ToolConfigManager {
     }
     final env = await _readEnv(envFile)
       ..remove('http_proxy')
-      ..remove('https_proxy');
+      ..remove('https_proxy')
+      ..remove('SSL_CERT_FILE');
     if (env.isEmpty) {
       await envFile.delete();
     } else {

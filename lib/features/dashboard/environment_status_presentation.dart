@@ -36,9 +36,9 @@ class EnvironmentStatusPresentation {
       ),
       EnvironmentStatus.rootCertificateMissing =>
         const EnvironmentStatusPresentation(
-          title: '需要安装根证书',
+          title: '配置文件缺失',
           badge: '待安装',
-          defaultMessage: '需要安装 MirrorStages 根证书，用于本机 HTTPS 代理的受信任连接。',
+          defaultMessage: '无法创建 Mirrorstages 相关的配置文件',
           icon: CupertinoIcons.lock_shield_fill,
           color: AppColors.orange,
           background: AppColors.orangeTintBackground,

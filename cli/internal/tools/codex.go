@@ -8,6 +8,7 @@ import (
 
 	"github.com/mirrorstages/mstages/internal/api"
 	"github.com/mirrorstages/mstages/internal/app"
+	"github.com/mirrorstages/mstages/internal/cert"
 )
 
 // codexTool manages ~/.codex: a .env with proxy vars, an auth.json holding
@@ -79,6 +80,9 @@ func (c *codexTool) writeProxyEnv(dir string) error {
 	}
 	env["http_proxy"] = app.LocalProxyURL
 	env["https_proxy"] = app.LocalProxyURL
+	if p, e := cert.Path(); e == nil {
+		env["SSL_CERT_FILE"] = p
+	}
 	return os.WriteFile(path, serializeEnv(env), 0o644)
 }
 

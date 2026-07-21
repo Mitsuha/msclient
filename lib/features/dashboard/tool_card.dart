@@ -330,7 +330,7 @@ class _BodyState extends State<_Body> {
       );
     }
 
-    final baseLabel = isInitialized ? '更换计费' : '初始化';
+    final baseLabel = isInitialized ? '更换计费' : '获取账号';
     return _WideButton(
       label: baseLabel,
       loading: _isApplying,

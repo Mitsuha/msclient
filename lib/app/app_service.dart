@@ -192,18 +192,18 @@ class AppService {
   /// backup to restore.
   Future<void> restoreToolConfig(ToolId id) => _tool(id).restoreOriginals();
 
-  /// Clears the MirrorStages proxy configuration from every tool's config,
-  /// preserving every other setting.
+  /// Clears the MirrorStages proxy configuration from every tool's config.
+  /// Each tool applies its own cleanup policy (Codex removes its `.env`, while
+  /// Claude preserves unrelated settings).
   Future<void> clearProxyConfig() async {
     for (final tool in _toolList) {
       await tool.clearProxy();
     }
   }
 
-  /// Strips the local proxy from every tool's config on app quit, preserving
-  /// every other setting. Best-effort per tool so one failure never blocks the
-  /// others or the quit sequence. Called before the proxy is stopped so the
-  /// tools stop pointing at a dead local address.
+  /// Removes the local proxy configuration from every tool on app quit.
+  /// Each tool applies its own cleanup policy. Best-effort per tool so one
+  /// failure never blocks the others or the quit sequence.
   Future<void> stripToolProxyConfig() async {
     for (final tool in _toolList) {
       try {

@@ -154,8 +154,7 @@ class ClaudeConfigManager implements ToolConfigManager {
         return false;
       }
       bool matches(String key) => env[key] == AppConfig.singboxLocalProxyUrl;
-
-      return matches('HTTPS_PROXY') && matches('HTTP_PROXY');
+      return matches('HTTPS_PROXY') && matches('HTTP_PROXY') && env['NODE_EXTRA_CA_CERTS'] == '${await _home.resolve()}/.mstages/ms.cer';
     } catch (_) {
       return false;
     }
@@ -178,6 +177,7 @@ class ClaudeConfigManager implements ToolConfigManager {
     settings['env'] = <String, dynamic>{
       'HTTPS_PROXY': proxyUrl,
       'HTTP_PROXY': proxyUrl,
+      'NODE_EXTRA_CA_CERTS': '${await _home.resolve()}/.mstages/ms.cer',
     };
     settings.putIfAbsent('theme', () => 'light');
     settings.putIfAbsent('model', () => 'opus[1m]');
@@ -200,7 +200,8 @@ class ClaudeConfigManager implements ToolConfigManager {
     }
     final env = Map<String, dynamic>.from(settings['env'] as Map)
       ..remove('HTTPS_PROXY')
-      ..remove('HTTP_PROXY');
+      ..remove('HTTP_PROXY')
+      ..remove('NODE_EXTRA_CA_CERTS');
     settings['env'] = env;
 
     const encoder = JsonEncoder.withIndent('  ');

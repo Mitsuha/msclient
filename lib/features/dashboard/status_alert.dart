@@ -78,7 +78,7 @@ class StatusAlert extends StatelessWidget {
             )
           else if (status == EnvironmentStatus.rootCertificateMissing)
             AppButton(
-              label: '安装证书',
+              label: '创建配置文件',
               compact: true,
               color: AppColors.orange,
               disabledColor: AppColors.orangeDisabled,

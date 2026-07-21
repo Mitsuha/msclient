@@ -16,7 +16,6 @@ class SettingsPage extends StatelessWidget {
     required this.isWorking,
     required this.errorMessage,
     required this.onRefresh,
-    required this.onInstallRootCertificate,
     required this.onSelectProxy,
     required this.onSetNetworkProxy,
     required this.onApplyCodexInitStep,
@@ -32,7 +31,6 @@ class SettingsPage extends StatelessWidget {
   final bool isWorking;
   final String? errorMessage;
   final VoidCallback onRefresh;
-  final VoidCallback onInstallRootCertificate;
   final ValueChanged<String> onSelectProxy;
   final ValueChanged<String> onSetNetworkProxy;
   final ValueChanged<String> onApplyCodexInitStep;
@@ -56,14 +54,6 @@ class SettingsPage extends StatelessWidget {
             ErrorBanner(message: errorMessage!),
           ],
           const SizedBox(height: 18),
-          SectionCard(
-            title: '根证书',
-            child: _CertificateSettings(
-              snapshot: snapshot,
-              isWorking: isWorking,
-              onInstall: onInstallRootCertificate,
-            ),
-          ),
           const SizedBox(height: 18),
           SectionCard(
             title: '代理节点',
@@ -674,41 +664,6 @@ class _ClearConfigSettings extends StatelessWidget {
                 onConfirmed: onClearConfig,
               ),
       ),
-    );
-  }
-}
-
-class _CertificateSettings extends StatelessWidget {
-  const _CertificateSettings({
-    required this.snapshot,
-    required this.isWorking,
-    required this.onInstall,
-  });
-
-  final AppSnapshot snapshot;
-  final bool isWorking;
-  final VoidCallback onInstall;
-
-  @override
-  Widget build(BuildContext context) {
-    final certificate = snapshot.localConfiguration.rootCertificate;
-    return StatusRow(
-      label: 'MirrorStages 根证书',
-      description: certificate.isInstalled
-          ? '已经安装 MirrorStages 证书，可以正常使用。'
-          : '需要安装 Mirrorstages 的证书才能正常使用。',
-      enabled: certificate.isInstalled,
-      enabledText: '已安装',
-      disabledText: '未安装',
-      trailing: certificate.isInstalled
-          ? null
-          : AppButton(
-              label: '安装',
-              compact: true,
-              color: AppColors.orange,
-              disabledColor: AppColors.orangeDisabled,
-              onPressed: isWorking ? null : onInstall,
-            ),
     );
   }
 }

@@ -55,8 +55,6 @@ class AppShell extends StatelessWidget {
                           isWorking: viewModel.isWorking,
                           errorMessage: viewModel.errorMessage,
                           onRefresh: viewModel.refresh,
-                          onInstallRootCertificate:
-                              viewModel.installRootCertificate,
                           onSelectProxy: viewModel.selectProxy,
                           onSetNetworkProxy: viewModel.setNetworkProxy,
                           onApplyCodexInitStep: viewModel.applyCodexInitStep,
