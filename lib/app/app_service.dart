@@ -72,9 +72,16 @@ class AppService {
 
     Future<String> resolveProxyUrl() async => AppConfig.singboxLocalProxyUrl;
 
+    final codexConfig = CodexConfigManager(home: home);
+    // Windows Codex does not reliably consume SSL_CERT_FILE from ~/.codex/.env.
+    // Persist it for the current user in the background without delaying launch.
+    unawaited(
+      codexConfig.configureWindowsSslCertEnvironment().catchError((_) {}),
+    );
+
     final tools = <ToolId, Tool>{
       ToolId.codex: CodexTool(
-        config: CodexConfigManager(home: home),
+        config: codexConfig,
         authApi: ToolAuthApi.codex(client),
         resolveProxyUrl: resolveProxyUrl,
         requireToken: requireToken,

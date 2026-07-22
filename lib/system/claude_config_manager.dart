@@ -7,6 +7,7 @@ import 'package:desktop/system/home_directory.dart';
 import 'package:desktop/system/safe_fs.dart';
 import 'package:desktop/system/tool_config_manager.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as path;
 
 /// The macOS Keychain generic-password item that Claude Code stores its
 /// credentials under.
@@ -29,19 +30,23 @@ class ClaudeConfigManager implements ToolConfigManager {
   final HomeDirectory _home;
 
   @override
-  Future<String> directoryPath() async => '${await _home.resolve()}/.claude';
+  Future<String> directoryPath() async =>
+      path.join(await _home.resolve(), '.claude');
 
   @override
   Future<bool> isInstalled() async =>
       safeExists(Directory(await directoryPath()));
 
   Future<String> _credentialsFilePath() async =>
-      '${await directoryPath()}/.credentials.json';
+      path.join(await directoryPath(), _credentialsFileName);
 
   /// Path of Claude Code's global profile, `~/.claude.json` — note this is a
   /// sibling of the `~/.claude` directory, not a file inside it.
   Future<String> _profileFilePath() async =>
-      '${await _home.resolve()}/.claude.json';
+      path.join(await _home.resolve(), '.claude.json');
+
+  Future<String> _certificatePath() async =>
+      path.join(await _home.resolve(), '.mstages', 'ms.cer');
 
   /// Sub-directory of `~/.claude` that holds the backed-up original config.
   static const _backupDirectoryName = 'old_config';
@@ -141,7 +146,7 @@ class ClaudeConfigManager implements ToolConfigManager {
   /// so a stale proxy address no longer counts as initialized.
   Future<bool> hasProxySettings() async {
     try {
-      final file = File('${await directoryPath()}/$_settingsFileName');
+      final file = File(path.join(await directoryPath(), _settingsFileName));
       if (!await file.exists()) {
         return false;
       }
@@ -154,7 +159,9 @@ class ClaudeConfigManager implements ToolConfigManager {
         return false;
       }
       bool matches(String key) => env[key] == AppConfig.singboxLocalProxyUrl;
-      return matches('HTTPS_PROXY') && matches('HTTP_PROXY') && env['NODE_EXTRA_CA_CERTS'] == '${await _home.resolve()}/.mstages/ms.cer';
+      return matches('HTTPS_PROXY') &&
+          matches('HTTP_PROXY') &&
+          env['NODE_EXTRA_CA_CERTS'] == await _certificatePath();
     } catch (_) {
       return false;
     }
@@ -172,12 +179,12 @@ class ClaudeConfigManager implements ToolConfigManager {
     final claudeDir = await directoryPath();
     await Directory(claudeDir).create(recursive: true);
 
-    final live = File('$claudeDir/$_settingsFileName');
+    final live = File(path.join(claudeDir, _settingsFileName));
     final settings = await _readSettings(live);
     settings['env'] = <String, dynamic>{
       'HTTPS_PROXY': proxyUrl,
       'HTTP_PROXY': proxyUrl,
-      'NODE_EXTRA_CA_CERTS': '${await _home.resolve()}/.mstages/ms.cer',
+      'NODE_EXTRA_CA_CERTS': await _certificatePath(),
     };
     settings.putIfAbsent('theme', () => 'light');
     settings.putIfAbsent('model', () => 'opus[1m]');
@@ -190,7 +197,7 @@ class ClaudeConfigManager implements ToolConfigManager {
   /// `env`, leaving every other setting — and every other env var — untouched.
   /// A missing file, or one without an `env` proxy, is a no-op.
   Future<void> clearProxySettings() async {
-    final file = File('${await directoryPath()}/$_settingsFileName');
+    final file = File(path.join(await directoryPath(), _settingsFileName));
     if (!await file.exists()) {
       return;
     }
@@ -239,10 +246,10 @@ class ClaudeConfigManager implements ToolConfigManager {
     final claudeDir = await directoryPath();
     await Directory(claudeDir).create(recursive: true);
 
-    final backupDir = Directory('$claudeDir/$_backupDirectoryName');
+    final backupDir = Directory(path.join(claudeDir, _backupDirectoryName));
     await _backupFileOnce(
-      live: File('$claudeDir/$_settingsFileName'),
-      backup: File('${backupDir.path}/$_settingsFileName'),
+      live: File(path.join(claudeDir, _settingsFileName)),
+      backup: File(path.join(backupDir.path, _settingsFileName)),
       backupDir: backupDir,
     );
     await _preserveCredentialsOriginal(claudeDir);
@@ -256,7 +263,7 @@ class ClaudeConfigManager implements ToolConfigManager {
   /// profile. Restore uses that to undo the merge while leaving the user's
   /// project history and other profile state intact.
   Future<void> _preserveProfileOriginal(Directory backupDir) async {
-    final backup = File('${backupDir.path}/$_profileBackupFileName');
+    final backup = File(path.join(backupDir.path, _profileBackupFileName));
     if (await backup.exists()) {
       return;
     }
@@ -281,8 +288,10 @@ class ClaudeConfigManager implements ToolConfigManager {
   /// written at most once, so repeated initializations never clobber the
   /// pristine original with a MirrorStages-generated one.
   Future<void> _preserveCredentialsOriginal(String claudeDir) async {
-    final backupDir = Directory('$claudeDir/$_backupDirectoryName');
-    final credentialsBackup = File('${backupDir.path}/$_credentialsFileName');
+    final backupDir = Directory(path.join(claudeDir, _backupDirectoryName));
+    final credentialsBackup = File(
+      path.join(backupDir.path, _credentialsFileName),
+    );
     if (await credentialsBackup.exists()) {
       return;
     }
@@ -294,7 +303,7 @@ class ClaudeConfigManager implements ToolConfigManager {
       }
     } else {
       await _backupFileOnce(
-        live: File('$claudeDir/$_credentialsFileName'),
+        live: File(path.join(claudeDir, _credentialsFileName)),
         backup: credentialsBackup,
         backupDir: backupDir,
       );
@@ -319,14 +328,20 @@ class ClaudeConfigManager implements ToolConfigManager {
   @override
   Future<bool> hasRestorableBackup() async {
     final backupDir = Directory(
-      '${await directoryPath()}/$_backupDirectoryName',
+      path.join(await directoryPath(), _backupDirectoryName),
     );
     if (!await safeExists(backupDir)) {
       return false;
     }
-    return await safeExists(File('${backupDir.path}/$_settingsFileName')) ||
-        await safeExists(File('${backupDir.path}/$_credentialsFileName')) ||
-        await safeExists(File('${backupDir.path}/$_profileBackupFileName'));
+    return await safeExists(
+          File(path.join(backupDir.path, _settingsFileName)),
+        ) ||
+        await safeExists(
+          File(path.join(backupDir.path, _credentialsFileName)),
+        ) ||
+        await safeExists(
+          File(path.join(backupDir.path, _profileBackupFileName)),
+        );
   }
 
   /// Restores the user's original Claude Code configuration from
@@ -339,17 +354,19 @@ class ClaudeConfigManager implements ToolConfigManager {
   @override
   Future<void> restoreOriginals() async {
     final claudeDir = await directoryPath();
-    final backupDir = Directory('$claudeDir/$_backupDirectoryName');
+    final backupDir = Directory(path.join(claudeDir, _backupDirectoryName));
     if (!await hasRestorableBackup()) {
       throw const ClaudeConfigRestoreException('未找到可恢复的原始 Claude 配置。');
     }
 
     await _restoreFile(
-      backup: File('${backupDir.path}/$_settingsFileName'),
-      live: File('$claudeDir/$_settingsFileName'),
+      backup: File(path.join(backupDir.path, _settingsFileName)),
+      live: File(path.join(claudeDir, _settingsFileName)),
     );
 
-    final credentialsBackup = File('${backupDir.path}/$_credentialsFileName');
+    final credentialsBackup = File(
+      path.join(backupDir.path, _credentialsFileName),
+    );
     if (Platform.isMacOS) {
       if (await credentialsBackup.exists()) {
         await _writeToKeychain(await credentialsBackup.readAsString());
@@ -359,7 +376,7 @@ class ClaudeConfigManager implements ToolConfigManager {
     } else {
       await _restoreFile(
         backup: credentialsBackup,
-        live: File('$claudeDir/$_credentialsFileName'),
+        live: File(path.join(claudeDir, _credentialsFileName)),
       );
     }
 
@@ -376,7 +393,7 @@ class ClaudeConfigManager implements ToolConfigManager {
   /// (project history, MCP servers, …) is left untouched. A missing backup is a
   /// no-op.
   Future<void> _restoreProfile(Directory backupDir) async {
-    final backup = File('${backupDir.path}/$_profileBackupFileName');
+    final backup = File(path.join(backupDir.path, _profileBackupFileName));
     if (!await backup.exists()) {
       return;
     }

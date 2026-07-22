@@ -169,6 +169,7 @@ void main() {
       expect(settings['env'], {
         'HTTPS_PROXY': 'http://127.0.0.1:18610',
         'HTTP_PROXY': 'http://127.0.0.1:18610',
+        'NODE_EXTRA_CA_CERTS': '${home.path}/.mstages/ms.cer',
       });
     });
 
@@ -213,6 +214,7 @@ void main() {
       expect(settings['env'], {
         'HTTPS_PROXY': 'http://127.0.0.1:18610',
         'HTTP_PROXY': 'http://127.0.0.1:18610',
+        'NODE_EXTRA_CA_CERTS': '${home.path}/.mstages/ms.cer',
       });
       expect(settings['theme'], 'light');
       expect(settings['model'], 'opus[1m]');

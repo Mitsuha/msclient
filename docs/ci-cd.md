@@ -49,7 +49,7 @@ flutter analyze
 flutter test
 git diff --check
 git add -A
-git commit -m "release: 1.2.3+45"
+git commit -m "{{ 为本次发布的变更写一条非常简短的提交信息，注重主要变化 }}"
 ```
 
 ### 4. 推送 `rm` 分支
@@ -125,12 +125,3 @@ git push github v1.2.3+45-patch.1
 tag push 会触发 `.github/workflows/shorebird-patch.yml`，并向目标 release
 `1.2.3+45` 的 Shorebird `stable` track 发布三个平台的 patch。必须等待前一个
 patch workflow 完成后再发布下一个序号。
-
-## 发布检查
-
-推送 tag 后，在 GitHub Actions 中确认 `prepare` 校验和三个系统任务全部成功。
-
-- tag 或版本校验失败：修正代码和版本后使用一个新 tag，不要移动或复用已推送的 tag。
-- 单个平台失败：在 GitHub Actions 中执行 **Re-run failed jobs**。
-- patch 包含不支持的 native 或 asset diff：停止 patch，改为递增版本并发布正式 release。
-- 某个平台失败不会自动回滚其他已经成功的平台。

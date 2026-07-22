@@ -11,6 +11,7 @@ import 'package:desktop/system/home_directory.dart';
 import 'package:desktop/system/safe_fs.dart';
 import 'package:desktop/system/tool_config_manager.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as path;
 
 /// Reads and mutates the local Codex configuration under `~/.codex`
 /// (auth.json, .env, config.toml), including backup/restore of the user's
@@ -29,8 +30,38 @@ class CodexConfigManager implements ToolConfigManager {
 
   final HomeDirectory _home;
 
+  /// On Windows, persists SSL_CERT_FILE in the current user's global
+  /// environment. Codex on Windows does not reliably read this value from its
+  /// `.env` file. This is intentionally separate from the existing `.env`
+  /// initialization flow.
+  Future<void> configureWindowsSslCertEnvironment() async {
+    if (!Platform.isWindows) {
+      return;
+    }
+
+    final home = await _home.resolve();
+    final certificatePath = path.join(home, '.mstages', 'ms.cer');
+    final result = await Process.run('setx', [
+      'SSL_CERT_FILE',
+      certificatePath,
+    ]);
+    await Process.run('setx', ['CODEX_CA_CERTIFICATE', certificatePath]);
+    if (result.exitCode != 0) {
+      throw ProcessException(
+        'setx',
+        ['SSL_CERT_FILE', certificatePath],
+        result.stderr.toString(),
+        result.exitCode,
+      );
+    }
+  }
+
   @override
-  Future<String> directoryPath() async => '${await _home.resolve()}/.codex';
+  Future<String> directoryPath() async =>
+      path.join(await _home.resolve(), '.codex');
+
+  Future<String> _certificatePath() async =>
+      path.join(await _home.resolve(), '.mstages', 'ms.cer');
 
   @override
   Future<bool> isInstalled() async =>
@@ -72,7 +103,7 @@ class CodexConfigManager implements ToolConfigManager {
       if (!await hasProxyEnv() || !await hasCleanProviderConfig()) {
         return const ToolStatus.uninitialized();
       }
-      final authFile = File('${await directoryPath()}/auth.json');
+      final authFile = File(path.join(await directoryPath(), 'auth.json'));
       if (!await authFile.exists()) {
         return const ToolStatus.uninitialized();
       }
@@ -90,14 +121,14 @@ class CodexConfigManager implements ToolConfigManager {
   /// `http_proxy` and `https_proxy` must match [AppConfig.singboxLocalProxyUrl].
   Future<bool> hasProxyEnv() async {
     try {
-      final envFile = File('${await directoryPath()}/.env');
+      final envFile = File(path.join(await directoryPath(), '.env'));
       if (!await envFile.exists()) {
         return false;
       }
       final env = parseEnvLines(await envFile.readAsLines());
       return env['http_proxy'] == AppConfig.singboxLocalProxyUrl &&
           env['https_proxy'] == AppConfig.singboxLocalProxyUrl &&
-          env['SSL_CERT_FILE'] == '${await _home.resolve()}/.mstages/ms.cer';
+          env['SSL_CERT_FILE'] == await _certificatePath();
     } catch (_) {
       return false;
     }
@@ -106,19 +137,19 @@ class CodexConfigManager implements ToolConfigManager {
   /// Points `.env`'s `http_proxy` / `https_proxy` at [proxyUrl], preserving
   /// any other entries the user keeps in the file.
   Future<void> writeProxyEnv(String proxyUrl) async {
-    final envFile = File('${await directoryPath()}/.env');
+    final envFile = File(path.join(await directoryPath(), '.env'));
     await envFile.parent.create(recursive: true);
     final env = await _readEnv(envFile);
     env['http_proxy'] = proxyUrl;
     env['https_proxy'] = proxyUrl;
-    env['SSL_CERT_FILE'] = '"${await _home.resolve()}/.mstages/ms.cer"';
+    env['SSL_CERT_FILE'] = '"${await _certificatePath()}"';
     await envFile.writeAsString(serializeEnv(env));
   }
 
   /// Deletes `.env` so Codex stops routing through the MirrorStages proxy.
   /// A missing file is a no-op.
   Future<void> clearProxyEnv() async {
-    final envFile = File('${await directoryPath()}/.env');
+    final envFile = File(path.join(await directoryPath(), '.env'));
     if (await envFile.exists()) {
       await envFile.delete();
     }
@@ -129,7 +160,7 @@ class CodexConfigManager implements ToolConfigManager {
   /// variable-level cleanup; normal clear/exit cleanup deletes the file via
   /// [clearProxyEnv].
   Future<void> removeProxyEnv() async {
-    final envFile = File('${await directoryPath()}/.env');
+    final envFile = File(path.join(await directoryPath(), '.env'));
     if (!await envFile.exists()) {
       return;
     }
@@ -148,7 +179,7 @@ class CodexConfigManager implements ToolConfigManager {
   /// [codexAuthGrantsMirrorStages]).
   Future<bool> hasMirrorStagesAuth() async {
     try {
-      final authFile = File('${await directoryPath()}/auth.json');
+      final authFile = File(path.join(await directoryPath(), 'auth.json'));
       if (!await authFile.exists()) {
         return false;
       }
@@ -166,7 +197,7 @@ class CodexConfigManager implements ToolConfigManager {
     final codexDirectory = Directory(await directoryPath());
     await codexDirectory.create(recursive: true);
     await File(
-      '${codexDirectory.path}/auth.json',
+      path.join(codexDirectory.path, 'auth.json'),
     ).writeAsString(_prettyJson(codexAuth));
   }
 
@@ -174,7 +205,7 @@ class CodexConfigManager implements ToolConfigManager {
   /// is absent, or it has no non-empty `provider` field.
   Future<bool> hasCleanProviderConfig() async {
     try {
-      final configFile = File('${await directoryPath()}/config.toml');
+      final configFile = File(path.join(await directoryPath(), 'config.toml'));
       if (!await configFile.exists()) {
         return true;
       }
@@ -189,7 +220,7 @@ class CodexConfigManager implements ToolConfigManager {
   /// Does not back up the user's original — the backup is taken once, up front,
   /// by [preserveOriginals] during a full first-time initialization.
   Future<void> clearProviderConfig() async {
-    final configFile = File('${await directoryPath()}/config.toml');
+    final configFile = File(path.join(await directoryPath(), 'config.toml'));
     if (await configFile.exists()) {
       await configFile.delete();
     }

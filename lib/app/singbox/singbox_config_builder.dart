@@ -51,8 +51,11 @@ class SingboxConfigBuilder {
   /// everything else is dialed directly.
   static const proxyDomains = <String>[
     'chatgpt.com',
-    'anthropic.com',
+    'ab.chatgpt.com',
     'openai.com',
+    'auth.openai.com',
+    'chat.openai.com',
+    'anthropic.com',
     'claude.com',
     'claude.ai',
     'api.anthropic.com',

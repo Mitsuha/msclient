@@ -9,7 +9,8 @@ class RootCertificateManager {
   final HomeDirectory _home;
   final String assetPath;
 
-  Future<String> certificatePath() async => '${await _home.resolve()}/.mstages/ms.cer';
+  Future<String> certificatePath() async =>
+      '${await _home.resolve()}/.mstages/ms.cer';
 
   Future<void> install() async {
     try {
@@ -29,5 +30,6 @@ class RootCertificateInstallException implements Exception {
   const RootCertificateInstallException(this.details, {this.guidance = ''});
   final String details;
   final String guidance;
-  @override String toString() => details;
+  @override
+  String toString() => details;
 }

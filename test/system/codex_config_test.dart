@@ -48,7 +48,8 @@ void main() {
       () async {
         await File('${home.path}/.codex/.env').writeAsString(
           'http_proxy=${AppConfig.singboxLocalProxyUrl}\n'
-          'https_proxy=${AppConfig.singboxLocalProxyUrl}\n',
+          'https_proxy=${AppConfig.singboxLocalProxyUrl}\n'
+          'SSL_CERT_FILE=${home.path}/.mstages/ms.cer\n',
         );
 
         expect(await manager.hasProxyEnv(), isTrue);
