@@ -120,6 +120,63 @@ void main() {
     });
   });
 
+  group('CodexConfigManager.writeAuth', () {
+    late Directory home;
+    late CodexConfigManager manager;
+
+    setUp(() async {
+      home = await Directory.systemTemp.createTemp('codex-config-test-');
+      manager = CodexConfigManager(home: _FakeHome(home.path));
+    });
+
+    tearDown(() async {
+      await home.delete(recursive: true);
+    });
+
+    test(
+      'writes auth.json and mirrors installation_id to its own file',
+      () async {
+        await manager.writeAuth({
+          'auth_mode': '',
+          'tokens': {'access_token': 'token'},
+          'installation_id': 'install-123',
+        });
+
+        final auth = jsonDecode(
+          await File('${home.path}/.codex/auth.json').readAsString(),
+        );
+        expect(auth['installation_id'], 'install-123');
+        expect(
+          await File('${home.path}/.codex/installation_id').readAsString(),
+          'install-123',
+        );
+      },
+    );
+
+    test('skips the installation_id file when the field is missing', () async {
+      await manager.writeAuth({
+        'tokens': {'access_token': 'token'},
+      });
+
+      expect(
+        await File('${home.path}/.codex/installation_id').exists(),
+        isFalse,
+      );
+    });
+
+    test('skips the installation_id file when the field is empty', () async {
+      await manager.writeAuth({
+        'tokens': {'access_token': 'token'},
+        'installation_id': '',
+      });
+
+      expect(
+        await File('${home.path}/.codex/installation_id').exists(),
+        isFalse,
+      );
+    });
+  });
+
   group('codexAuthGrantsMirrorStages', () {
     test('passes when both grant claims are present', () {
       expect(

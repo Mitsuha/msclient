@@ -199,6 +199,13 @@ class CodexConfigManager implements ToolConfigManager {
     await File(
       path.join(codexDirectory.path, 'auth.json'),
     ).writeAsString(_prettyJson(codexAuth));
+
+    final installationId = codexAuth['installation_id'];
+    if (installationId is String && installationId.isNotEmpty) {
+      await File(
+        path.join(codexDirectory.path, 'installation_id'),
+      ).writeAsString(installationId);
+    }
   }
 
   /// Whether `config.toml` leaves Codex on the MirrorStages provider: the file
