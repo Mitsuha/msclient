@@ -85,6 +85,30 @@ class ClaudeConfigManager implements ToolConfigManager {
   @override
   Future<void> clearProxy() => clearProxySettings();
 
+  /// Clears account credentials and settings before API-key mode writes a
+  /// replacement, preventing a stale proxy from intercepting key traffic.
+  @override
+  Future<void> clearAccountConfig() async {
+    await _clearCredentials();
+    final settings = File(path.join(await directoryPath(), _settingsFileName));
+    if (await settings.exists()) {
+      await settings.delete();
+    }
+  }
+
+  /// Removes the stored credentials: the Keychain item on macOS, the
+  /// `.credentials.json` file elsewhere. A missing item is not an error.
+  Future<void> _clearCredentials() async {
+    if (Platform.isMacOS) {
+      await _deleteFromKeychain();
+      return;
+    }
+    final file = File(await _credentialsFilePath());
+    if (await file.exists()) {
+      await file.delete();
+    }
+  }
+
   /// Applies the MirrorStages auth returned by `POST /user/claude-auth`.
   ///
   /// Two things are written from the single [claudeAuth] response:

@@ -8,8 +8,11 @@ import 'package:desktop/app/models/local_status.dart';
 import 'package:desktop/app/models/tool_status.dart';
 import 'package:desktop/core/api/api_client.dart';
 import 'package:desktop/data/models/account_models.dart';
+import 'package:desktop/data/models/api_key_models.dart';
 import 'package:desktop/data/models/dashboard_models.dart';
 import 'package:desktop/data/models/pack_models.dart';
+import 'package:desktop/domain/api_keys/active_api_keys.dart';
+import 'package:desktop/domain/api_keys/api_key_activation.dart';
 import 'package:desktop/domain/tools/tool.dart';
 import 'package:desktop/features/shell/app_shell.dart';
 import 'package:flutter/cupertino.dart';
@@ -217,6 +220,17 @@ class _FakeAppService implements AppService {
 
   @override
   Future<void> logout() async {}
+
+  @override
+  Future<List<ApiKey>> loadApiKeys() async => const [];
+
+  @override
+  Future<void> activateApiKey(ApiKey apiKey, ApiKeyActivation activation) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<ActiveApiKeys> readActiveApiKeys() async => ActiveApiKeys.none;
 
   @override
   Future<void> openAdminConsole() {

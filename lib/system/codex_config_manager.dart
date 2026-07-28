@@ -86,6 +86,17 @@ class CodexConfigManager implements ToolConfigManager {
   @override
   Future<void> clearProxy() => clearProxyEnv();
 
+  /// Clears account credentials and proxy env before API-key mode.
+  /// The caller replaces `config.toml` separately.
+  @override
+  Future<void> clearAccountConfig() async {
+    await clearProxyEnv();
+    final auth = File(path.join(await directoryPath(), 'auth.json'));
+    if (await auth.exists()) {
+      await auth.delete();
+    }
+  }
+
   /// Reports the Codex initialization state. Codex counts as initialized only
   /// when all three checks pass:
   ///

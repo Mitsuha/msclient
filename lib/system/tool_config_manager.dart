@@ -43,6 +43,10 @@ abstract interface class ToolConfigManager {
   /// action).
   Future<void> clearProxy();
 
+  /// Clears account credentials and proxy config before API-key mode.
+  /// User backups remain untouched.
+  Future<void> clearAccountConfig();
+
   /// Restores the user's pre-MirrorStages config from the backup taken at
   /// first-time initialization. Throws when there is no backup to restore.
   Future<void> restoreOriginals();

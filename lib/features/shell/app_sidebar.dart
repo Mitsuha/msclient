@@ -58,6 +58,12 @@ class AppSidebar extends StatelessWidget {
             onPressed: () => onSelectSection(NavSection.dashboard),
           ),
           _SidebarItem(
+            icon: CupertinoIcons.hammer,
+            label: 'API Keys',
+            selected: selectedSection == NavSection.apiKeys,
+            onPressed: () => onSelectSection(NavSection.apiKeys),
+          ),
+          _SidebarItem(
             icon: CupertinoIcons.gear,
             label: '设置',
             selected: selectedSection == NavSection.settings,

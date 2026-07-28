@@ -64,6 +64,9 @@ abstract interface class Tool {
   /// up.
   Future<void> restoreOriginals();
 
+  /// Clears account-mode config before switching to an API key.
+  Future<void> clearAccountConfig();
+
   /// Whether the on-disk credentials are still a MirrorStages-issued account,
   /// even with the proxy config currently absent (launch-time re-apply).
   Future<bool> hasIssuedCredentials();
@@ -122,6 +125,9 @@ abstract class ConfiguredTool<C extends ToolConfigManager> implements Tool {
 
   @override
   Future<void> restoreOriginals() => config.restoreOriginals();
+
+  @override
+  Future<void> clearAccountConfig() => config.clearAccountConfig();
 
   @override
   Future<bool> hasIssuedCredentials() => config.hasIssuedCredentials();

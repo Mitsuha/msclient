@@ -1,10 +1,10 @@
 import 'package:desktop/app/models/app_snapshot.dart';
 import 'package:desktop/app/singbox/singbox_config_builder.dart';
 import 'package:desktop/domain/tools/tool_initializer.dart';
-import 'package:desktop/features/settings/error_banner.dart';
 import 'package:desktop/features/settings/settings_rows.dart';
 import 'package:desktop/ui/app_colors.dart';
 import 'package:desktop/ui/widgets/app_button.dart';
+import 'package:desktop/ui/widgets/error_banner.dart';
 import 'package:desktop/ui/widgets/section_card.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:package_info_plus/package_info_plus.dart';

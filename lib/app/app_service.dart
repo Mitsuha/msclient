@@ -11,6 +11,7 @@ import 'package:desktop/app/singbox/singbox_config_builder.dart';
 import 'package:desktop/app/singbox/singbox_controller.dart';
 import 'package:desktop/core/api/api_client.dart';
 import 'package:desktop/core/logging/app_logger.dart';
+import 'package:desktop/data/api/api_key_api.dart';
 import 'package:desktop/data/api/auth_api.dart';
 import 'package:desktop/data/api/dashboard_api.dart';
 import 'package:desktop/data/api/desktop_config_api.dart';
@@ -18,13 +19,17 @@ import 'package:desktop/data/api/singbox_clash_api.dart';
 import 'package:desktop/data/api/tool_auth_api.dart';
 import 'package:desktop/data/api/user_pack_api.dart';
 import 'package:desktop/data/models/account_models.dart';
+import 'package:desktop/data/models/api_key_models.dart';
 import 'package:desktop/data/preferences/network_proxy_store.dart';
 import 'package:desktop/data/preferences/proxy_preference_store.dart';
 import 'package:desktop/data/session/session_store.dart';
+import 'package:desktop/domain/api_keys/active_api_keys.dart';
+import 'package:desktop/domain/api_keys/api_key_activation.dart';
 import 'package:desktop/domain/tools/claude_tool.dart';
 import 'package:desktop/domain/tools/codex_tool.dart';
 import 'package:desktop/domain/tools/tool.dart';
 import 'package:desktop/domain/tools/tool_initializer.dart';
+import 'package:desktop/system/api_key_config_manager.dart';
 import 'package:desktop/system/claude_config_manager.dart';
 import 'package:desktop/system/codex_config_manager.dart';
 import 'package:desktop/system/external_browser.dart';
@@ -49,6 +54,8 @@ class AppService {
     required this._authApi,
     required this._dashboardApi,
     required this._userPackApi,
+    required this._apiKeyApi,
+    required this._apiKeyConfig,
     required this._processInspector,
     required this._rootCertificate,
     required this._browser,
@@ -99,6 +106,8 @@ class AppService {
       authApi: AuthApi(client),
       dashboardApi: DashboardApi(client),
       userPackApi: UserPackApi(client),
+      apiKeyApi: ApiKeyApi(client),
+      apiKeyConfig: ApiKeyConfigManager(home: home),
       processInspector: const ConflictProcessInspector(),
       rootCertificate: RootCertificateManager(
         home: home,
@@ -129,6 +138,8 @@ class AppService {
   final AuthApi _authApi;
   final DashboardApi _dashboardApi;
   final UserPackApi _userPackApi;
+  final ApiKeyApi _apiKeyApi;
+  final ApiKeyConfigManager _apiKeyConfig;
   final ConflictProcessInspector _processInspector;
   final RootCertificateManager _rootCertificate;
   final ExternalBrowser _browser;
@@ -244,6 +255,49 @@ class AppService {
       }
     }
   }
+
+  // --- API keys ---
+
+  /// The account's enabled API keys. Loaded on demand by the API Keys page
+  /// rather than as part of [loadSnapshot], so the periodic refresh does not
+  /// pay for a list nobody is looking at.
+  Future<List<ApiKey>> loadApiKeys() async {
+    final session = await _sessionStore.load();
+    if (session == null) {
+      throw const UnauthenticatedException();
+    }
+    try {
+      final list = await _apiKeyApi.listEnabled(token: session.token);
+      return list.keys;
+    } on ApiException catch (error) {
+      if (error.isUnauthorized) {
+        await _sessionStore.clear();
+        throw const UnauthenticatedException();
+      }
+      rethrow;
+    }
+  }
+
+  /// Switches selected tools from account mode to [apiKey] mode.
+  /// Account config is cleared first to prevent later proxy re-application
+  /// from overwriting the key config.
+  Future<void> activateApiKey(
+    ApiKey apiKey,
+    ApiKeyActivation activation,
+  ) async {
+    if (activation.codexEnabled) {
+      await _tool(ToolId.codex).clearAccountConfig();
+    }
+    if (activation.claudeEnabled) {
+      await _tool(ToolId.claude).clearAccountConfig();
+    }
+    await _apiKeyConfig.apply(apiKey: apiKey.key, activation: activation);
+  }
+
+  /// Which key each tool's local config is currently on, read from disk.
+  /// Best-effort: an unreadable config reads as "no key", so the list simply
+  /// offers 启用 again.
+  Future<ActiveApiKeys> readActiveApiKeys() => _apiKeyConfig.readActive();
 
   // --- Snapshot assembly ---
 

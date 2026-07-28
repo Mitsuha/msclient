@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:desktop/app/app_view_model.dart';
 import 'package:desktop/app/models/nav_section.dart';
+import 'package:desktop/features/api_keys/api_keys_page.dart';
 import 'package:desktop/features/auth/login_overlay.dart';
 import 'package:desktop/features/dashboard/dashboard_page.dart';
 import 'package:desktop/features/settings/settings_page.dart';
@@ -49,6 +50,14 @@ class AppShell extends StatelessWidget {
                           onApplyClaudeBilling: viewModel.applyClaudeBilling,
                           onInstallRootCertificate:
                               viewModel.installRootCertificate,
+                        ),
+                        NavSection.apiKeys => ApiKeysPage(
+                          apiKeys: viewModel.apiKeys,
+                          isLoading: viewModel.isLoadingApiKeys,
+                          errorMessage: viewModel.apiKeysErrorMessage,
+                          onRefresh: viewModel.refreshApiKeys,
+                          onActivate: viewModel.activateApiKey,
+                          isInUse: viewModel.isApiKeyInUse,
                         ),
                         NavSection.settings => SettingsPage(
                           snapshot: snapshot,

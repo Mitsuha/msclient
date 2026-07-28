@@ -13,6 +13,20 @@ abstract final class AppConfig {
   static const String rootCertificateAssetPath =
       'assets/ca/mirrorstages-root-ca.cer';
 
+  // ── API key mode ───────────────────────────────────────────────────────────
+
+  /// Anthropic-compatible endpoint Claude Code is pointed at when a key is
+  /// activated (`ANTHROPIC_BASE_URL`).
+  static const String anthropicBaseUrl =
+      'https://api.mirrorstages.com/anthropic';
+
+  /// OpenAI-compatible endpoint Codex is pointed at when a key is activated.
+  static const String openaiBaseUrl = 'https://api.mirrorstages.com/openai';
+
+  /// Key of the `[model_providers.*]` table written into Codex's `config.toml`;
+  /// `model_provider` must name it for Codex to resolve the provider.
+  static const String codexProviderKey = 'Mirrorstages';
+
   // ── sing-box ───────────────────────────────────────────────────────────────
 
   /// `~/.mstages`: holds the sing-box binary, config file, and runtime log.

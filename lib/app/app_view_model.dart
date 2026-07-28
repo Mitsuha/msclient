@@ -9,6 +9,9 @@ import 'package:desktop/app/models/nav_section.dart';
 import 'package:desktop/core/api/api_client.dart';
 import 'package:desktop/core/logging/app_logger.dart';
 import 'package:desktop/core/utils/serial_queue.dart';
+import 'package:desktop/data/models/api_key_models.dart';
+import 'package:desktop/domain/api_keys/active_api_keys.dart';
+import 'package:desktop/domain/api_keys/api_key_activation.dart';
 import 'package:desktop/domain/tools/tool.dart';
 import 'package:flutter/foundation.dart';
 
@@ -36,6 +39,11 @@ class AppViewModel extends ChangeNotifier {
   late final BackgroundRefresher _refresher;
 
   AppSnapshot? _snapshot;
+  List<ApiKey> _apiKeys = const [];
+  ActiveApiKeys _activeApiKeys = ActiveApiKeys.none;
+  bool _hasLoadedApiKeys = false;
+  bool _isLoadingApiKeys = false;
+  String? _apiKeysErrorMessage;
   NavSection _selectedSection = NavSection.dashboard;
   bool _isWorking = false;
   bool _isAuthenticated = false;
@@ -45,6 +53,14 @@ class AppViewModel extends ChangeNotifier {
   String? _loginErrorMessage;
 
   AppSnapshot? get snapshot => _snapshot;
+  List<ApiKey> get apiKeys => _apiKeys;
+
+  /// Whether a tool's local config is already pointed at [apiKey] — the list
+  /// shows 正在使用 instead of 启用 for it.
+  bool isApiKeyInUse(ApiKey apiKey) => _activeApiKeys.isInUse(apiKey.key);
+
+  bool get isLoadingApiKeys => _isLoadingApiKeys;
+  String? get apiKeysErrorMessage => _apiKeysErrorMessage;
   NavSection get selectedSection => _selectedSection;
   bool get isWorking => _isWorking;
   bool get isAuthenticated => _isAuthenticated;
@@ -80,6 +96,11 @@ class AppViewModel extends ChangeNotifier {
     // half-written config. Local file IO only; the proxy is already starting in
     // the background, so this does not delay the UI.
     await _service.reapplyIssuedProxyConfig();
+
+    // Which key the tools are already on, so the list can open straight into
+    // 正在使用. Read after the re-apply above, which is the only other thing
+    // that rewrites those files at launch.
+    await _readActiveApiKeys();
 
     unawaited(_refreshWhenProxyStarted(proxyStartup));
 
@@ -121,6 +142,73 @@ class AppViewModel extends ChangeNotifier {
     }
     _selectedSection = section;
     notifyListeners();
+    if (section == NavSection.apiKeys) {
+      unawaited(loadApiKeys());
+    }
+  }
+
+  /// Loads keys once on demand, or reloads them when [force] is true.
+  /// Failures are isolated from the main snapshot in [apiKeysErrorMessage].
+  Future<void> loadApiKeys({bool force = false}) async {
+    if (!_isAuthenticated || _isLoadingApiKeys) {
+      return;
+    }
+    if (_hasLoadedApiKeys && !force) {
+      return;
+    }
+
+    _isLoadingApiKeys = true;
+    _apiKeysErrorMessage = null;
+    notifyListeners();
+
+    try {
+      _apiKeys = await _service.loadApiKeys();
+      _hasLoadedApiKeys = true;
+      // Cheap local reads, and they keep the 正在使用 marks honest when the
+      // configs were edited outside the app since launch.
+      await _readActiveApiKeys();
+    } on UnauthenticatedException {
+      _handleSignedOut();
+    } catch (error) {
+      _apiKeysErrorMessage = error.toString();
+    } finally {
+      _isLoadingApiKeys = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshApiKeys() => loadApiKeys(force: true);
+
+  /// Applies [activation] serially, then refreshes local key and dashboard
+  /// state. Failures appear in [apiKeysErrorMessage].
+  Future<void> activateApiKey(
+    ApiKey apiKey,
+    ApiKeyActivation activation,
+  ) async {
+    _apiKeysErrorMessage = null;
+    notifyListeners();
+    try {
+      await _queue.run(() async {
+        await _service.activateApiKey(apiKey, activation);
+        _activeApiKeys = await _service.readActiveApiKeys();
+        _snapshot = await _service.loadSnapshot();
+      });
+    } on UnauthenticatedException {
+      _handleSignedOut();
+    } catch (error) {
+      _apiKeysErrorMessage = error.toString();
+    }
+    notifyListeners();
+  }
+
+  /// Re-reads active keys after any tool-config write.
+  /// This is best-effort; unreadable configs keep the last known state.
+  Future<void> _readActiveApiKeys() async {
+    try {
+      _activeApiKeys = await _service.readActiveApiKeys();
+    } catch (_) {
+      // Nothing actionable: the list falls back to offering 启用.
+    }
   }
 
   /// Applies the chosen billing method to Codex by rewriting its credentials.
@@ -235,6 +323,7 @@ class AppViewModel extends ChangeNotifier {
     _isAuthenticated = false;
     _errorMessage = null;
     _loginErrorMessage = null;
+    _clearApiKeys();
     notifyListeners();
   }
 
@@ -274,6 +363,7 @@ class AppViewModel extends ChangeNotifier {
       _errorMessage = error.toString();
       return BillingOutcome.failed;
     } finally {
+      await _readActiveApiKeys();
       _isWorking = false;
       notifyListeners();
     }
@@ -296,6 +386,7 @@ class AppViewModel extends ChangeNotifier {
     } catch (error) {
       _errorMessage = error.toString();
     } finally {
+      await _readActiveApiKeys();
       _isWorking = false;
       notifyListeners();
     }
@@ -363,6 +454,14 @@ class AppViewModel extends ChangeNotifier {
     _refresher.stop();
     _isAuthenticated = false;
     _snapshot = null;
+    _clearApiKeys();
+  }
+
+  /// Drops the cached key list so the next session re-fetches it.
+  void _clearApiKeys() {
+    _apiKeys = const [];
+    _hasLoadedApiKeys = false;
+    _apiKeysErrorMessage = null;
   }
 
   @override

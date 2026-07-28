@@ -1,2 +1,2 @@
 /// Sections reachable from the sidebar.
-enum NavSection { dashboard, settings }
+enum NavSection { dashboard, apiKeys, settings }
