@@ -63,6 +63,10 @@ func Start(ctx context.Context, binaryPath string, proxies []models.ClientProxyO
 	cmd := exec.Command(binaryPath, "run", "-c", configPath)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
+	// sing-box is shared by every mstages process on the machine, so it must
+	// not be in our terminal's process group: a Ctrl-C aimed at one session
+	// would otherwise kill the proxy under all the others.
+	detach(cmd)
 	if err := cmd.Start(); err != nil {
 		logFile.Close()
 		return nil, fmt.Errorf("start sing-box: %w", err)

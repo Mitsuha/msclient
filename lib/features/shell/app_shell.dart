@@ -19,6 +19,7 @@ class AppShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final viewModel = context.watch<AppViewModel>();
     final snapshot = viewModel.snapshot;
+
     return CupertinoPageScaffold(
       child: Stack(
         children: [
@@ -55,6 +56,9 @@ class AppShell extends StatelessWidget {
                             onRefresh: viewModel.refreshApiKeys,
                             onActivate: viewModel.activateApiKey,
                             isInUse: viewModel.isApiKeyInUse,
+                            isCodexInitialized: snapshot.codex.isInitialized,
+                            isClaudeInitialized: snapshot.claude.isInitialized,
+                            onManage: viewModel.openApiKeysConsole,
                           ),
                           NavSection.settings => SettingsPage(
                             snapshot: snapshot,

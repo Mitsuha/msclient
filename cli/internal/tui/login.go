@@ -6,18 +6,10 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // ErrCancelled is returned when the user aborts a TUI prompt.
 var ErrCancelled = errors.New("cancelled")
-
-var (
-	focusedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	blurredStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	titleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("63"))
-	helpStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-)
 
 type loginModel struct {
 	inputs   []textinput.Model
@@ -95,7 +87,11 @@ func (m loginModel) View() string {
 	s := "\n  " + titleStyle.Render("登录 MirrorStages") + "\n\n"
 	labels := []string{"账号", "密码"}
 	for i, in := range m.inputs {
-		s += fmt.Sprintf("  %s\n  %s\n\n", labels[i], in.View())
+		label := blurredStyle.Render(labels[i])
+		if i == m.focus {
+			label = focusedStyle.Render(labels[i])
+		}
+		s += fmt.Sprintf("  %s\n  %s\n\n", label, in.View())
 	}
 	s += "  " + helpStyle.Render("Tab 切换 · Enter 提交 · Esc 取消") + "\n"
 	return s

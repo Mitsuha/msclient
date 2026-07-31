@@ -1,0 +1,77 @@
+#!/bin/sh
+# Pre-commit checks. Enable with: git config core.hooksPath .githooks
+#
+# Escape hatches:
+#   SKIP_TESTS=1 git commit ...   跳过 flutter test / go test
+#   git commit --no-verify ...    跳过整个 hook
+set -eu
+
+staged() {
+  git diff --cached --name-only --diff-filter=ACMR -- "$@"
+}
+
+DART_FILES="$(staged '*.dart')"
+GO_FILES="$(staged 'cli/*.go')"
+PUBSPEC="$(staged pubspec.yaml pubspec.lock analysis_options.yaml)"
+
+# 1. 格式化暂存的 Dart 文件
+if [ -n "$DART_FILES" ]; then
+  echo "==> dart format"
+  for file in $DART_FILES; do
+    if ! git diff --quiet -- "$file"; then
+      echo "无法自动格式化 $file：该文件还有未暂存的修改。" >&2
+      echo "先 stage 或 stash 这些修改，再重新 commit。" >&2
+      exit 1
+    fi
+    dart format "$file"
+    git add -- "$file"
+  done
+fi
+
+# 2. 格式化暂存的 Go 文件
+if [ -n "$GO_FILES" ]; then
+  echo "==> gofmt"
+  for file in $GO_FILES; do
+    if ! git diff --quiet -- "$file"; then
+      echo "无法自动格式化 $file：该文件还有未暂存的修改。" >&2
+      echo "先 stage 或 stash 这些修改，再重新 commit。" >&2
+      exit 1
+    fi
+    gofmt -w "$file"
+    git add -- "$file"
+  done
+fi
+
+# 3. 空白字符错误
+echo "==> git diff --check"
+git diff --cached --check
+
+# 4. Dart 静态分析与测试
+if [ -n "$DART_FILES" ] || [ -n "$PUBSPEC" ]; then
+  echo "==> flutter analyze"
+  flutter analyze
+  if [ -n "$DART_FILES" ] && [ "${SKIP_TESTS:-0}" != "1" ]; then
+    echo "==> flutter test"
+    flutter test
+  fi
+fi
+
+# 5. Go 静态分析与测试
+if [ -n "$GO_FILES" ]; then
+  echo "==> go vet"
+  (cd cli && go vet ./...)
+  if [ "${SKIP_TESTS:-0}" != "1" ]; then
+    echo "==> go test"
+    (cd cli && NO_PROXY=127.0.0.1,localhost go test ./...)
+  fi
+fi
+
+# 6. 发版相关文件改动时校验 version.json
+if [ -n "$(staged version.json pubspec.yaml)" ]; then
+  echo "==> version.json"
+  VERSION="$(
+    sed -nE 's/^version:[[:space:]]*([^[:space:]#]+).*$/\1/p' pubspec.yaml \
+      | tr -d "\"'"
+  )"
+  bash tool/ci/check_version_manifest.sh "$VERSION" version.json
+fi

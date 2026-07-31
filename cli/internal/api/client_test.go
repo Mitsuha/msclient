@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -100,11 +101,20 @@ func TestToolAuthSendsBearerAndPackID(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer session-tok" {
 			t.Errorf("Authorization = %q", got)
 		}
-		var body map[string]int
+		var body map[string]any
 		raw, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(raw, &body)
-		if body["user_pack_id"] != 0 {
-			t.Errorf("user_pack_id = %d", body["user_pack_id"])
+		if body["user_pack_id"] != float64(0) {
+			t.Errorf("user_pack_id = %v", body["user_pack_id"])
+		}
+		// The backend keys on Dart's Platform.operatingSystem, so macOS must
+		// be reported as "macos" rather than Go's "darwin".
+		want := runtime.GOOS
+		if want == "darwin" {
+			want = "macos"
+		}
+		if body["client_type"] != want {
+			t.Errorf("client_type = %v, want %q", body["client_type"], want)
 		}
 		io.WriteString(w, `{"tokens":{"access_token":"x"}}`)
 	}))

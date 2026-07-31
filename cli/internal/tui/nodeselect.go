@@ -26,15 +26,15 @@ func (d nodeDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 	if !ok {
 		return
 	}
-	name := it.option.Name
-	if it.option.URL == d.selectedURL {
-		name += " ✓"
-	}
-	line := "  " + name
+	cursor, name := "  ", itemStyle.Render(it.option.Name)
 	if index == m.Index() {
-		line = focusedStyle.Render("▸ " + name)
+		cursor = focusedStyle.Bold(true).Render("▸ ")
+		name = focusedStyle.Bold(true).Render(it.option.Name)
 	}
-	fmt.Fprint(w, line)
+	if it.option.URL == d.selectedURL {
+		name += successStyle.Render(" ✓")
+	}
+	fmt.Fprint(w, cursor+name)
 }
 
 type nodeModel struct {
@@ -61,6 +61,8 @@ func (m nodeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.WindowSizeMsg:
 		m.list.SetWidth(msg.Width)
+		// A narrower width can wrap the help line, so re-fit to keep one page.
+		fitAllItems(&m.list, len(m.list.Items()))
 	}
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
@@ -72,6 +74,17 @@ func (m nodeModel) View() string {
 		return ""
 	}
 	return "\n" + m.list.View()
+}
+
+// fitAllItems grows the list height until every node fits on a single page, so
+// the selector never truncates the list into paginated "…" output.
+func fitAllItems(l *list.Model, count int) {
+	for h := count + 2; h <= count+12; h++ {
+		l.SetHeight(h)
+		if l.Paginator.TotalPages <= 1 {
+			return
+		}
+	}
 }
 
 // PromptNode shows the node list and returns the chosen option. currentURL, if
@@ -86,13 +99,21 @@ func PromptNode(options []models.ClientProxyOption, currentURL string) (*models.
 		}
 	}
 
-	l := list.New(items, nodeDelegate{selectedURL: currentURL}, 40, min(len(options)+2, 14))
+	l := list.New(items, nodeDelegate{selectedURL: currentURL}, 40, len(options)+2)
 	l.Title = "选择代理节点"
 	l.Styles.Title = titleStyle
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(false)
+	l.SetShowPagination(false)
 	l.SetShowHelp(true)
+	l.Help.Styles.ShortKey = focusedStyle
+	l.Help.Styles.ShortDesc = helpStyle
+	l.Help.Styles.ShortSeparator = helpStyle
+	l.Help.Styles.FullKey = focusedStyle
+	l.Help.Styles.FullDesc = helpStyle
+	l.Help.Styles.FullSeparator = helpStyle
 	l.Select(startIndex)
+	fitAllItems(&l, len(options))
 
 	final, err := tea.NewProgram(nodeModel{list: l}).Run()
 	if err != nil {

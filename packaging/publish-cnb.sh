@@ -1,15 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 2 ]]; then
-  echo "usage: $0 <version> <artifacts-dir>" >&2
+if [[ $# -lt 2 || $# -gt 3 ]]; then
+  echo "usage: $0 <version> <artifacts-dir> [version-manifest]" >&2
   exit 2
 fi
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="$1"
 ARTIFACTS_DIR="$(cd "$2" && pwd)"
+MANIFEST="${3:-$ROOT/version.json}"
 REPOSITORY_URL="https://cnb.cool/mirrorstages/gost.git"
 CHECKOUT_DIR="cnb-release"
+
+# The update manifest lives in this repository; CI only validates and copies it.
+bash "$ROOT/tool/ci/check_version_manifest.sh" "$VERSION" "$MANIFEST"
+
+CLI_BINARIES=(
+  mstages-darwin-arm64
+  mstages-linux-amd64
+)
+
+for binary in "${CLI_BINARIES[@]}"; do
+  if [[ ! -f "$ARTIFACTS_DIR/$binary" ]]; then
+    echo "error: missing CLI artifact: $ARTIFACTS_DIR/$binary" >&2
+    exit 1
+  fi
+done
 
 git clone --depth 1 "$REPOSITORY_URL" "$CHECKOUT_DIR"
 install -d "$CHECKOUT_DIR/latest"
@@ -23,18 +40,14 @@ install -m 0644 \
   "$ARTIFACTS_DIR/MirrorStages-Desktop-${VERSION}-windows-x64.msi" \
   "$CHECKOUT_DIR/latest/mirrorstages.msi"
 
-printf '%s\n' \
-  '{' \
-  "  \"version\": \"$VERSION\"," \
-  '  "forced": true,' \
-  '  "download_page": "https://mirrorstages.com/app",' \
-  '  "auth_download": {' \
-  '    "darwin": "https://cnb.cool/mirrorstages/gost/-/git/raw/main/latest/mirrorstages.dmg",' \
-  '    "windows": "https://cnb.cool/mirrorstages/gost/-/git/raw/main/latest/mirrorstages.msi",' \
-  '    "linux": "https://cnb.cool/mirrorstages/gost/-/git/raw/main/latest/mirrorstages.deb"' \
-  '  }' \
-  '}' \
-  > "$CHECKOUT_DIR/latest/version.json"
+# Artifact downloads drop the executable bit; restore it on the way in.
+install -d "$CHECKOUT_DIR/latest/cli"
+for binary in "${CLI_BINARIES[@]}"; do
+  install -m 0755 "$ARTIFACTS_DIR/$binary" "$CHECKOUT_DIR/latest/cli/$binary"
+done
+
+install -m 0644 "$MANIFEST" "$CHECKOUT_DIR/latest/version.json"
+install -m 0755 "$ROOT/packaging/install.sh" "$CHECKOUT_DIR/latest/install.sh"
 
 git -C "$CHECKOUT_DIR" config user.name github-actions[bot]
 git -C "$CHECKOUT_DIR" config user.email 41898282+github-actions[bot]@users.noreply.github.com

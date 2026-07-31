@@ -13,20 +13,39 @@ class SubscriptionSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (packs.isEmpty) {
-      return const _EmptySubscription();
+      return const _Card(child: _EmptySubscription());
     }
 
     return Column(
       children: [
         for (var i = 0; i < packs.length; i++) ...[
-          if (i > 0)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 14),
-              child: _Divider(),
-            ),
-          _PackRow(pack: packs[i]),
+          if (i > 0) const SizedBox(height: _cardGap),
+          _Card(child: _PackRow(pack: packs[i])),
         ],
       ],
+    );
+  }
+}
+
+/// The vertical gap between two pack cards.
+const double _cardGap = 10;
+
+/// Each pack sits on its own surface, so the list reads as separate
+/// subscriptions rather than one table split by rules.
+class _Card extends StatelessWidget {
+  const _Card({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.sectionBackground,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: child,
     );
   }
 }
@@ -39,9 +58,8 @@ class _PackRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SummaryIcon(
             icon: CupertinoIcons.sparkles,
@@ -71,7 +89,7 @@ class _PackRow extends StatelessWidget {
                       style: TextStyle(
                         color: packStatusColor(pack.status),
                         fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
@@ -136,15 +154,6 @@ class _UsageBar extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _Divider extends StatelessWidget {
-  const _Divider();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(height: 1, color: AppColors.hoverBackground);
   }
 }
 

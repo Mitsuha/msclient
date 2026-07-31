@@ -23,8 +23,9 @@ type claudeTool struct {
 	fb *fileBackup
 }
 
-func (c *claudeTool) name() string       { return "claude" }
-func (c *claudeTool) executable() string { return "claude" }
+func (c *claudeTool) name() string        { return "claude" }
+func (c *claudeTool) displayName() string { return "Claude Code" }
+func (c *claudeTool) executable() string  { return "claude" }
 
 func (c *claudeTool) fileBackup() (*fileBackup, error) {
 	if c.fb != nil {
@@ -89,6 +90,12 @@ func (c *claudeTool) performBackup() error {
 }
 
 func (c *claudeTool) restoreBackup() error {
+	// Cleanup restores every tool, so bail out without creating ~/.claude on a
+	// machine that only ever ran the other persona.
+	if !hasBackupDir(app.ClaudeDir) {
+		return nil
+	}
+
 	// Restore credentials first (before the backup dir is removed).
 	if path, err := c.credsSnapshotPath(); err == nil {
 		if raw, err := os.ReadFile(path); err == nil {
@@ -110,7 +117,70 @@ func (c *claudeTool) restoreBackup() error {
 	return fb.Restore()
 }
 
-func (c *claudeTool) initialize(ctx context.Context, token string) error {
+// account reads the stored credentials and reports the configured MirrorStages
+// account. The discriminator is the user_pack_id MirrorStages embeds in the
+// OAuth token: a token issued by Anthropic directly does not carry it.
+func (c *claudeTool) account() (*accountInfo, error) {
+	content, existed, err := readClaudeCredentials()
+	if err != nil || !existed {
+		return nil, err
+	}
+	token := claudeAccessToken([]byte(content))
+	if _, ok := claudeUserPackID(token); !ok {
+		return nil, nil
+	}
+
+	path, err := app.ClaudeProfilePath()
+	if err != nil {
+		return nil, err
+	}
+	var profile struct {
+		OauthAccount struct {
+			EmailAddress string `json:"emailAddress"`
+			DisplayName  string `json:"displayName"`
+			Tier         string `json:"organizationRateLimitTier"`
+		} `json:"oauthAccount"`
+	}
+	if raw, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(raw, &profile)
+	}
+	return &accountInfo{
+		Email:    profile.OauthAccount.EmailAddress,
+		Username: profile.OauthAccount.DisplayName,
+		Plan:     claudePlan(profile.OauthAccount.Tier),
+	}, nil
+}
+
+// requestAccount asks the backend for a fresh Claude account. Nothing is
+// written yet, so the caller can still back up the user's original config.
+func (c *claudeTool) requestAccount(ctx context.Context, token string) (*pendingAccount, error) {
+	raw, err := api.New().ClaudeAuth(ctx, token, 0)
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		OauthAccount struct {
+			EmailAddress string `json:"emailAddress"`
+			DisplayName  string `json:"displayName"`
+			Tier         string `json:"organizationRateLimitTier"`
+		} `json:"oauthAccount"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, err
+	}
+	return &pendingAccount{
+		raw: raw,
+		info: &accountInfo{
+			Email:    resp.OauthAccount.EmailAddress,
+			Username: resp.OauthAccount.DisplayName,
+			Plan:     claudePlan(resp.OauthAccount.Tier),
+		},
+	}, nil
+}
+
+// writeAccount stores the granted credentials and merges the identity keys
+// into ~/.claude.json.
+func (c *claudeTool) writeAccount(pending *pendingAccount) error {
 	dir, err := app.ClaudeDir()
 	if err != nil {
 		return err
@@ -119,20 +189,23 @@ func (c *claudeTool) initialize(ctx context.Context, token string) error {
 		return err
 	}
 
-	client := api.New()
-	raw, err := client.ClaudeAuth(ctx, token, 0)
-	if err != nil {
-		return err
-	}
 	var authResp map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &authResp); err != nil {
+	if err := json.Unmarshal(pending.raw, &authResp); err != nil {
 		return err
 	}
-
 	if err := c.writeCredentials(authResp); err != nil {
 		return err
 	}
-	if err := c.writeProfile(authResp); err != nil {
+	return c.writeProfile(authResp)
+}
+
+// applyProxy points Claude Code at the loopback proxy.
+func (c *claudeTool) applyProxy() error {
+	dir, err := app.ClaudeDir()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	return c.writeProxySettings(dir)

@@ -12,6 +12,7 @@ import (
 	"github.com/mirrorstages/mstages/internal/cert"
 	"github.com/mirrorstages/mstages/internal/config"
 	"github.com/mirrorstages/mstages/internal/models"
+	"github.com/mirrorstages/mstages/internal/procs"
 	"github.com/mirrorstages/mstages/internal/singbox"
 	"github.com/mirrorstages/mstages/internal/tui"
 )
@@ -28,57 +29,142 @@ func Run(ctx context.Context, kind Kind) int {
 	return code
 }
 
+// runTool walks the five stages of a persona launch. Several mstages processes
+// share one machine, so every stage checks what already exists before creating
+// anything, and teardown only happens for the last one standing.
 func runTool(ctx context.Context, kind Kind) (int, error) {
 	t := newTool(kind)
 
-	// 1. Require a login session.
 	creds, err := auth.Load()
 	if err != nil {
 		return 0, err
 	}
 
-	// 2. Ensure the sing-box binary is present (download with a progress bar).
+	// Install and trust before the timeline opens: both may print a progress
+	// bar or a warning, which would collide with the spinner's redraws.
 	binaryPath, err := ensureSingbox(ctx)
 	if err != nil {
 		return 0, err
 	}
-
-	// 3. Ensure the MirrorStages CA is trusted (non-fatal on failure).
 	if err := cert.EnsureTrusted(); err != nil {
 		fmt.Fprintf(os.Stderr, "mstages: 警告: 证书信任失败: %v\n", err)
 	}
 
-	// 4. Start the local sing-box proxy for the selected node.
-	proc, err := startProxy(ctx, binaryPath)
+	tl := tui.NewTimeline("MirrorStages")
+
+	// 1. Proxy service: start only if nothing is already serving.
+	if err := startService(ctx, tl, binaryPath); err != nil {
+		tl.Fail()
+		return 0, err
+	}
+
+	// 2-3. Account: reuse the one already on disk, or request a new one and
+	// back up what it replaces.
+	if err := ensureAccount(ctx, tl, t, creds.Token); err != nil {
+		tl.Fail()
+		return 0, err
+	}
+
+	// 4. Hand the terminal to the tool. Nothing is printed from here on.
+	tl.Finish("正在启动 " + t.displayName())
+	code, err := launch(ctx, t.executable(), os.Args[1:])
 	if err != nil {
 		return 0, err
 	}
-	defer proc.Stop()
-	status("代理已就绪")
 
-	// 5. Back up the tool's existing config, restoring it on exit.
-	if err := t.performBackup(); err != nil {
-		return 0, fmt.Errorf("备份 %s 配置: %w", t.name(), err)
+	// 5. Tear down only if we are the last mstages process on the machine.
+	cleanup()
+	return code, nil
+}
+
+// startService makes sure the loopback proxy is up. The node reads the same
+// either way: from the user's point of view the service is starting whether
+// this process launched it or merely found it already running.
+func startService(ctx context.Context, tl *tui.Timeline, binaryPath string) error {
+	tl.Start("正在启动服务")
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
 	}
-	defer func() {
+	if _, err := singbox.EnsureRunning(ctx, binaryPath, fetchNodes(ctx), cfg.SelectedNodeURL); err != nil {
+		return err
+	}
+	tl.Done("服务已就绪")
+	return nil
+}
+
+// ensureAccount reuses the MirrorStages account already configured for the
+// tool, or requests a new one. Only the "new account" path touches the user's
+// original config, and only that path backs it up — backing up on every launch
+// would snapshot our own config over the user's after the first run.
+func ensureAccount(ctx context.Context, tl *tui.Timeline, t tool, token string) error {
+	tl.Start("正在获取账号")
+
+	existing, err := t.account()
+	if err != nil {
+		return err
+	}
+
+	if existing != nil {
+		tl.Done("使用账号")
+		printAccount(tl, existing)
+		tl.Pause()
+		return t.applyProxy()
+	}
+
+	pending, err := t.requestAccount(ctx, token)
+	if err != nil {
+		return accountError(t, err)
+	}
+	tl.Done("已申请到账号")
+	printAccount(tl, pending.info)
+	tl.Pause()
+
+	// 3. Back up before the first overwrite.
+	tl.Start("正在备份配置")
+	if err := t.performBackup(); err != nil {
+		return fmt.Errorf("备份 %s 配置: %w", t.name(), err)
+	}
+	tl.Done("配置已备份")
+
+	if err := t.writeAccount(pending); err != nil {
+		return fmt.Errorf("写入 %s 账号: %w", t.name(), err)
+	}
+	return t.applyProxy()
+}
+
+// accountError translates the two backend failures worth explaining.
+func accountError(t tool, err error) error {
+	var apiErr *api.Error
+	if errors.As(err, &apiErr) {
+		switch {
+		case apiErr.Unauthorized():
+			_ = auth.Clear()
+			return fmt.Errorf("登录已失效，请重新运行 `mstages auth login`")
+		case apiErr.NoAvailableAccount():
+			return fmt.Errorf("账号池暂无可用账号，请联系客服补号")
+		}
+	}
+	return fmt.Errorf("申请 %s 账号: %w", t.name(), err)
+}
+
+// cleanup restores every tool's original config and stops the shared proxy,
+// but only when no other mstages process is left. Another live session would
+// otherwise lose its proxy and its credentials mid-run.
+//
+// Restore covers both tools, not just this persona's: a machine that ran
+// mcodex once would otherwise keep a stale ~/.codex/old_configs forever.
+func cleanup() {
+	if procs.OthersRunning() {
+		return
+	}
+	for _, t := range allTools() {
 		if err := t.restoreBackup(); err != nil {
 			fmt.Fprintf(os.Stderr, "mstages: 恢复 %s 配置失败: %v\n", t.name(), err)
 		}
-	}()
-
-	// 6. Initialize the tool with MirrorStages credentials + proxy settings.
-	if err := t.initialize(ctx, creds.Token); err != nil {
-		var apiErr *api.Error
-		if errors.As(err, &apiErr) && apiErr.Unauthorized() {
-			_ = auth.Clear()
-			return 0, fmt.Errorf("登录已失效，请重新运行 `mstages auth login`")
-		}
-		return 0, fmt.Errorf("初始化 %s: %w", t.name(), err)
 	}
-	status(fmt.Sprintf("%s 初始化完成，正在启动…", t.name()))
-
-	// 7. Launch the downstream tool with stdio passed through.
-	return launch(ctx, t.executable(), os.Args[1:])
+	singbox.StopShared()
 }
 
 // ensureSingbox returns the binary path, downloading it (with a TUI progress
@@ -94,17 +180,6 @@ func ensureSingbox(ctx context.Context) (string, error) {
 	return tui.DownloadSingbox(ctx)
 }
 
-// startProxy fetches the node list, resolves the selected node, and starts
-// sing-box.
-func startProxy(ctx context.Context, binaryPath string) (*singbox.Process, error) {
-	options := fetchNodes(ctx)
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, err
-	}
-	return singbox.Start(ctx, binaryPath, options, cfg.SelectedNodeURL)
-}
-
 // fetchNodes returns the server's node list, falling back to a single default
 // node when the API is unreachable.
 func fetchNodes(ctx context.Context) []models.ClientProxyOption {
@@ -115,6 +190,15 @@ func fetchNodes(ctx context.Context) []models.ClientProxyOption {
 	return options
 }
 
-func status(msg string) {
-	fmt.Fprintf(os.Stderr, "  \033[32m✓\033[0m %s\n", msg)
+// printAccount hangs the account's identity off the timeline's last node.
+// Tokens are never printed.
+func printAccount(tl *tui.Timeline, info *accountInfo) {
+	if info == nil {
+		return
+	}
+	tl.Details(
+		[2]string{"邮箱", info.Email},
+		[2]string{"用户名", info.Username},
+		[2]string{"套餐", info.Plan},
+	)
 }

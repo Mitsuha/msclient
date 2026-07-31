@@ -17,8 +17,9 @@ type codexTool struct {
 	fb *fileBackup
 }
 
-func (c *codexTool) name() string       { return "codex" }
-func (c *codexTool) executable() string { return "codex" }
+func (c *codexTool) name() string        { return "codex" }
+func (c *codexTool) displayName() string { return "Codex" }
+func (c *codexTool) executable() string  { return "codex" }
 
 func (c *codexTool) fileBackup() (*fileBackup, error) {
 	if c.fb != nil {
@@ -45,6 +46,11 @@ func (c *codexTool) performBackup() error {
 }
 
 func (c *codexTool) restoreBackup() error {
+	// Cleanup restores every tool, so bail out without creating ~/.codex on a
+	// machine that only ever ran the other persona.
+	if !hasBackupDir(app.CodexDir) {
+		return nil
+	}
 	fb, err := c.fileBackup()
 	if err != nil {
 		return err
@@ -52,7 +58,40 @@ func (c *codexTool) restoreBackup() error {
 	return fb.Restore()
 }
 
-func (c *codexTool) initialize(ctx context.Context, token string) error {
+// account reads ~/.codex/auth.json and reports the configured MirrorStages
+// account. The discriminator is the pair of claims MirrorStages puts in the
+// access token; a token from a direct ChatGPT login does not carry them.
+func (c *codexTool) account() (*accountInfo, error) {
+	dir, err := app.CodexDir()
+	if err != nil {
+		return nil, err
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "auth.json"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	tokens := codexTokens(raw)
+	if !codexGrantsMirrorStages(tokens.Access) {
+		return nil, nil
+	}
+	return codexAccount(tokens), nil
+}
+
+// requestAccount asks the backend for a fresh Codex account. Nothing is
+// written yet, so the caller can still back up the user's original config.
+func (c *codexTool) requestAccount(ctx context.Context, token string) (*pendingAccount, error) {
+	raw, err := api.New().CodexAuth(ctx, token, 0)
+	if err != nil {
+		return nil, err
+	}
+	return &pendingAccount{raw: raw, info: codexAccount(codexTokens(raw))}, nil
+}
+
+// writeAccount stores the granted credentials as ~/.codex/auth.json.
+func (c *codexTool) writeAccount(pending *pendingAccount) error {
 	dir, err := app.CodexDir()
 	if err != nil {
 		return err
@@ -60,11 +99,20 @@ func (c *codexTool) initialize(ctx context.Context, token string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
+	return c.writeAuth(dir, pending.raw)
+}
 
-	if err := c.writeProxyEnv(dir); err != nil {
+// applyProxy points Codex at the loopback proxy and drops any provider
+// override so the account credentials are used.
+func (c *codexTool) applyProxy() error {
+	dir, err := app.CodexDir()
+	if err != nil {
 		return err
 	}
-	if err := c.writeAuth(ctx, dir, token); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	if err := c.writeProxyEnv(dir); err != nil {
 		return err
 	}
 	return c.clearProviderConfig(dir)
@@ -86,13 +134,8 @@ func (c *codexTool) writeProxyEnv(dir string) error {
 	return os.WriteFile(path, serializeEnv(env), 0o644)
 }
 
-// writeAuth fetches Codex credentials and writes the raw JSON body to auth.json.
-func (c *codexTool) writeAuth(ctx context.Context, dir, token string) error {
-	client := api.New()
-	raw, err := client.CodexAuth(ctx, token, 0)
-	if err != nil {
-		return err
-	}
+// writeAuth writes the granted credentials verbatim to auth.json.
+func (c *codexTool) writeAuth(dir string, raw json.RawMessage) error {
 	// Re-indent for readability, matching the desktop pretty-print.
 	var pretty any
 	if err := json.Unmarshal(raw, &pretty); err != nil {
@@ -103,7 +146,23 @@ func (c *codexTool) writeAuth(ctx context.Context, dir, token string) error {
 		return err
 	}
 	out = append(out, '\n')
-	return os.WriteFile(filepath.Join(dir, "auth.json"), out, 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "auth.json"), out, 0o644); err != nil {
+		return err
+	}
+	return writeInstallationID(dir, raw)
+}
+
+// writeInstallationID mirrors the response's installation_id into a bare
+// ~/.codex/installation_id file, matching the desktop client. Codex reads it
+// separately from auth.json, and it must survive across account switches.
+func writeInstallationID(dir string, authJSON []byte) error {
+	var doc struct {
+		InstallationID string `json:"installation_id"`
+	}
+	if err := json.Unmarshal(authJSON, &doc); err != nil || doc.InstallationID == "" {
+		return nil
+	}
+	return os.WriteFile(filepath.Join(dir, "installation_id"), []byte(doc.InstallationID), 0o644)
 }
 
 // clearProviderConfig deletes config.toml so Codex falls back to the default

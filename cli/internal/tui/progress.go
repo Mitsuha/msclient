@@ -8,8 +8,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
+	"github.com/mirrorstages/mstages/internal/download"
 	"github.com/mirrorstages/mstages/internal/singbox"
 )
 
@@ -21,6 +21,7 @@ type progressMsg struct {
 type doneMsg struct{ err error }
 
 type progressModel struct {
+	title      string
 	bar        progress.Model
 	downloaded int64
 	total      int64
@@ -52,13 +53,14 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m progressModel) View() string {
-	title := lipgloss.NewStyle().Bold(true).Render("下载 sing-box 代理内核")
+	title := titleStyle.Render(m.title)
 	var body string
 	if m.total > 0 {
 		ratio := float64(m.downloaded) / float64(m.total)
-		body = m.bar.ViewAs(ratio) + fmt.Sprintf("  %s / %s", humanBytes(m.downloaded), humanBytes(m.total))
+		counts := fmt.Sprintf("  %s / %s", humanBytes(m.downloaded), humanBytes(m.total))
+		body = m.bar.ViewAs(ratio) + helpStyle.Render(counts)
 	} else {
-		body = fmt.Sprintf("已下载 %s…", humanBytes(m.downloaded))
+		body = helpStyle.Render(fmt.Sprintf("已下载 %s…", humanBytes(m.downloaded)))
 	}
 	return fmt.Sprintf("\n  %s\n\n  %s\n\n", title, body)
 }
@@ -66,24 +68,36 @@ func (m progressModel) View() string {
 // DownloadSingbox downloads the sing-box binary showing a progress bar, and
 // returns its path. Callers should only invoke this when the binary is missing.
 func DownloadSingbox(ctx context.Context) (string, error) {
-	m := progressModel{bar: progress.New(progress.WithDefaultGradient())}
+	var path string
+	err := Download("下载 sing-box 代理内核", func(report download.ProgressFunc) error {
+		var err error
+		path, err = singbox.EnsureInstalled(ctx, singbox.ProgressFunc(report))
+		return err
+	})
+	return path, err
+}
+
+// Download runs work under a progress bar titled title. work reports progress
+// through the callback it is given; the bar closes when work returns.
+func Download(title string, work func(report download.ProgressFunc) error) error {
+	m := progressModel{
+		title: title,
+		bar:   progress.New(progress.WithScaledGradient("#155E75", "#22D3EE")),
+	}
 	p := tea.NewProgram(m)
 
-	var resultPath string
-	var resultErr error
+	var workErr error
 	go func() {
-		path, err := singbox.EnsureInstalled(ctx, func(d, t int64) {
+		workErr = work(func(d, t int64) {
 			p.Send(progressMsg{downloaded: d, total: t})
 		})
-		resultPath = path
-		resultErr = err
-		p.Send(doneMsg{err: err})
+		p.Send(doneMsg{err: workErr})
 	}()
 
 	if _, err := p.Run(); err != nil {
-		return "", err
+		return err
 	}
-	return resultPath, resultErr
+	return workErr
 }
 
 func humanBytes(n int64) string {

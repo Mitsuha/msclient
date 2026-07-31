@@ -191,6 +191,9 @@ class AppService {
 
   Future<void> openRegister() => _browser.open(AppConfig.registerUrl);
 
+  Future<void> openApiKeysConsole() =>
+      _browser.open(AppConfig.apiKeysConsoleUrl);
+
   Future<void> installRootCertificate() => _rootCertificate.install();
 
   // --- Tool lifecycle (uniform across every tool) ---

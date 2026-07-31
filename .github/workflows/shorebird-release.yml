@@ -24,6 +24,13 @@ jobs:
         shell: bash
         run: bash tool/ci/resolve_tag.sh release "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
 
+      - name: Validate update manifest
+        shell: bash
+        run: |
+          bash tool/ci/check_version_manifest.sh \
+            "${{ steps.resolve.outputs.version }}" \
+            version.json
+
   windows:
     name: Release Windows
     needs: prepare
@@ -161,9 +168,46 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  cli:
+    name: Build mstages CLI
+    needs: prepare
+    runs-on: ubuntu-22.04
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      - name: Vet CLI
+        working-directory: cli
+        run: go vet ./...
+
+      - name: Test CLI
+        working-directory: cli
+        env:
+          NO_PROXY: 127.0.0.1,localhost
+        run: go test ./...
+
+      - name: Build CLI binaries
+        run: bash packaging/build-cli.sh "$VERSION" dist/cli
+
+      - name: Upload CLI binaries
+        uses: actions/upload-artifact@v7
+        with:
+          name: MirrorStages-Desktop-${{ env.VERSION }}-cli
+          path: dist/cli/mstages-*
+          if-no-files-found: error
+          retention-days: 7
+
   publish:
     name: Publish installers to CNB
-    needs: [prepare, windows, linux, macos]
+    needs: [prepare, windows, linux, macos, cli]
     runs-on: ubuntu-22.04
     concurrency:
       group: cnb-release-publish

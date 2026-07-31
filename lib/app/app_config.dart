@@ -10,6 +10,10 @@ abstract final class AppConfig {
   static const String adminConsoleUrl = 'https://dashboard.mirrorstages.com';
   static const String registerUrl =
       'https://dashboard.mirrorstages.com/auth/register?utm_type=app';
+
+  /// Where keys are actually created and revoked; the app only lists them.
+  static const String apiKeysConsoleUrl =
+      'https://dashboard.mirrorstages.com/api-keys';
   static const String rootCertificateAssetPath =
       'assets/ca/mirrorstages-root-ca.cer';
 

@@ -1,127 +1,70 @@
-# CI/CD 发布手册
+# 发布手册
 
-本项目通过 GitHub Actions 和 Shorebird 发布 Windows、Linux、macOS 正式版本及 Dart 热更新。
+以 `1.2.3+45` 为例，替换成实际版本号。
 
-## 分支与触发规则
-
-- 本地 `master` 对应 GitHub 仓库的 `rm` 分支，推送命令为
-  `git push github master:rm`。
-- 普通分支 push、`rm` 分支 push 和 Pull Request 都不会触发发布。
-- 正式 release tag：`v<major>.<minor>.<patch>+<build>`，例如
-  `v1.2.3+45`。
-- patch tag：`v<目标 release 版本>-patch.<序号>`，例如
-  `v1.2.3+45-patch.1`。
-- tag 去掉前导 `v` 和 patch 后缀后，必须与 `pubspec.yaml` 的
-  `version` 完全一致，否则 workflow 会终止。
-
-GitHub Actions 仓库 Secrets 必须配置有效的 `SHOREBIRD_TOKEN`。
+提交时 pre-commit hook 会自动执行格式化、analyze、测试和 version.json
+校验；检查失败则不会提交，无需手动重复执行。
 
 ## 发布正式版本
 
-正式版本适用于 Dart、原生代码、资源、字体、依赖或构建配置的任何变更。
-
-### 1. 同步发布分支
-
 ```sh
+# 1. 同步发布分支（当前应在本地 master）
 git fetch github rm
 git rebase github/rm
-```
 
-开始发布前，确认当前位于本地 `master`，并处理完 rebase 冲突。
+# 2. 改版本号：pubspec.yaml 的 version、version.json 的 "version"，两者必须一致
+#    version.json 里 forced / download_page / auth_download / cli_download 按需改
 
-### 2. 更新版本
-
-修改 `pubspec.yaml`：
-
-```yaml
-version: 1.2.3+45
-```
-
-同一 `major.minor` 下，`build` 必须比之前的正式版本大。Windows MSI
-会把 `1.2.3+45` 映射成 ProductVersion `1.2.45`，因此 `major`、`minor`
-不能超过 255，`build` 不能超过 65535。
-
-### 3. 验证并提交
-
-```sh
-dart format --output=none --set-exit-if-changed .
-flutter analyze
-flutter test
-git diff --check
+# 3. 提交（pre-commit hook 自动跑格式化、analyze、测试、version.json 校验）
 git add -A
-git commit -m "{{ 为本次发布的变更写一条非常简短的提交信息，注重主要变化 }}"
-```
+git commit -m "release: 1.2.3+45"
 
-### 4. 推送 `rm` 分支
-
-```sh
+# 4. 推送分支，确认推送成功后再打 tag
 git push github master:rm
-```
 
-确认推送成功后再创建 tag，保证 GitHub 的 `rm` 分支已经包含发布提交。
-
-### 5. 创建并推送 release tag
-
-```sh
+# 5. 打 tag 触发发布
 git tag v1.2.3+45
 git push github v1.2.3+45
 ```
 
-tag push 会触发 `.github/workflows/shorebird-release.yml`。workflow 并行创建
-三个平台的 Shorebird release，并生成保留 7 天的 GitHub Actions artifacts：
+CI 完成后 CNB 仓库 `latest/` 下会更新：
 
-- Windows：`MirrorStages-Desktop-1.2.3+45-windows-x64.msi`
-- Linux：`mirrorstages-desktop_1.2.3+45_amd64.deb`
-- macOS：`MirrorStages-Desktop-1.2.3+45-macos.dmg`
+- `mirrorstages.msi` / `mirrorstages.deb` / `mirrorstages.dmg`
+- `cli/mstages-darwin-arm64` / `cli/mstages-linux-amd64`
+- `version.json`（即仓库根目录的 `version.json`）
+- `install.sh`（即 `packaging/install.sh`）
 
-三个安装包都生成成功后，workflow 会将它们发布到 CNB 仓库的 `latest/`
-目录，分别命名为 `mirrorstages.msi`、`mirrorstages.deb` 和
-`mirrorstages.dmg`，并将 `latest/version.json` 更新为当前 tag 中的版本号。
-CNB 仓库使用 shallow clone，只获取默认分支的最新一次提交；具体发布逻辑位于
-`packaging/publish-cnb.sh`。
-该 workflow 不会创建 GitHub Release 页面。
+CLI 安装/更新命令（用户侧，重复执行即为更新）：
 
-CNB 的 HTTPS 凭据通过 GitHub Actions repository secret
-`CNB_GIT_CREDENTIALS` 提供。secret 的值使用 Git credential store 格式：
-
-```text
-https://cnb:<CNB access token>@cnb.cool
+```sh
+curl -fsSL https://cnb.cool/mirrorstages/gost/-/git/raw/main/latest/install.sh | sh
 ```
 
 ## 发布 patch
 
-patch 只适用于 Shorebird 支持的 Dart 代码变更。原生代码、资源、字体、依赖和
-构建配置发生变化时，必须发布新的正式版本。
-
-### 1. 准备目标版本代码
-
-从目标 release 对应的代码开始修复，并保持 `pubspec.yaml` 版本不变：
-
-```yaml
-version: 1.2.3+45
-```
-
-完成修改后执行验证并提交：
+仅限 Dart 代码变更；原生代码、资源、字体、依赖、构建配置变了必须发正式版本。
 
 ```sh
-dart format --output=none --set-exit-if-changed .
-flutter analyze
-flutter test
-git diff --check
+# 1. 在目标 release 的代码上修复，pubspec.yaml 版本保持 1.2.3+45 不变
 git add -A
 git commit -m "fix: describe the patch"
 git push github master:rm
-```
 
-### 2. 创建并推送 patch tag
-
-第一个 patch 使用 `.1`，后续依次使用 `.2`、`.3`：
-
-```sh
+# 2. 打 patch tag，序号从 .1 开始递增
 git tag v1.2.3+45-patch.1
 git push github v1.2.3+45-patch.1
 ```
 
-tag push 会触发 `.github/workflows/shorebird-patch.yml`，并向目标 release
-`1.2.3+45` 的 Shorebird `stable` track 发布三个平台的 patch。必须等待前一个
-patch workflow 完成后再发布下一个序号。
+前一个 patch workflow 跑完后才能发下一个序号。
+
+## 约束速查
+
+- 本地 `master` → GitHub `rm` 分支；只有 tag push 触发发布。
+- release tag `v1.2.3+45`，patch tag `v1.2.3+45-patch.1`；去掉 `v` 和 patch 后缀后
+  必须与 `pubspec.yaml`、`version.json` 完全一致。
+- 同一 `major.minor` 下 `build` 必须递增；`major`/`minor` ≤ 255，`build` ≤ 65535。
+- 仓库 Secrets 需要 `SHOREBIRD_TOKEN` 和 `CNB_GIT_CREDENTIALS`
+  （格式 `https://cnb:<CNB access token>@cnb.cool`）。
+- 不会创建 GitHub Release 页面；GitHub Actions artifacts 保留 7 天。
+- 跳过 hook：`SKIP_TESTS=1 git commit ...` 只跳过测试，
+  `git commit --no-verify` 跳过全部检查。

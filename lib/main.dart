@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:desktop/app/app.dart';
-import 'package:desktop/ui/app_colors.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:window_manager/window_manager.dart';
 

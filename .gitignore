@@ -46,3 +46,4 @@ app.*.map.json
 
 # Local packaging output
 /dist/
+/cli/mcodex

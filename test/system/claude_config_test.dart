@@ -20,6 +20,7 @@ String _credentials({
   String memberId = 'member',
   String packId = 'pack',
   String prefix = 'sk-ant-oat01-',
+  String? rateLimitTier,
 }) {
   final raw = utf8.encode('$userId|$memberId|$packId|');
   // 8 bytes that are deliberately not valid UTF-8, to prove the parser reads
@@ -36,21 +37,16 @@ String _credentials({
   ]);
   final content = _rawUrlB64([...raw, ...padding]);
   return jsonEncode({
-    'claudeAiOauth': {'accessToken': '$prefix$content-abc123-def456'},
+    'claudeAiOauth': {
+      'accessToken': '$prefix$content-abc123-def456',
+      'rateLimitTier': ?rateLimitTier,
+    },
   });
 }
 
 /// Builds a `~/.claude.json` profile map with the given `oauthAccount` fields.
-Map<String, dynamic> _profile({
-  String? emailAddress,
-  String? displayName,
-  String? organizationRateLimitTier,
-}) => {
-  'oauthAccount': {
-    'emailAddress': ?emailAddress,
-    'displayName': ?displayName,
-    'organizationRateLimitTier': ?organizationRateLimitTier,
-  },
+Map<String, dynamic> _profile({String? emailAddress, String? displayName}) => {
+  'oauthAccount': {'emailAddress': ?emailAddress, 'displayName': ?displayName},
 };
 
 void main() {
@@ -79,14 +75,14 @@ void main() {
   });
 
   group('claudeAccountFromProfile', () {
-    test('sources email, display name, and plan from oauthAccount', () {
+    test('sources identity from oauthAccount and plan from credentials', () {
       final account = claudeAccountFromProfile(
         _profile(
           emailAddress: 'alex.chen@example.com',
           displayName: 'Alex Chen',
-          organizationRateLimitTier: 'default_claude_max_20x',
         ),
         7,
+        credentialsJson: _credentials(rateLimitTier: 'default_claude_max_20x'),
       );
 
       expect(account.email, 'alex.chen@example.com');
@@ -97,8 +93,9 @@ void main() {
 
     test('maps the known rate-limit tiers', () {
       String tierFor(String tier) => claudeAccountFromProfile(
-        _profile(organizationRateLimitTier: tier),
+        _profile(),
         0,
+        credentialsJson: _credentials(rateLimitTier: tier),
       ).planType;
 
       expect(tierFor('default_claude_max_20x'), 'Max 20X');
@@ -108,8 +105,9 @@ void main() {
     test('falls back to Pro for unknown or missing tiers', () {
       expect(
         claudeAccountFromProfile(
-          _profile(organizationRateLimitTier: 'something_else'),
+          _profile(),
           0,
+          credentialsJson: _credentials(rateLimitTier: 'something_else'),
         ).planType,
         'Pro',
       );

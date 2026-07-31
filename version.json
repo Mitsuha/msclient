@@ -1,0 +1,16 @@
+{
+  "version": "1.0.2+16",
+  "cli_version": "1.0.2+16",
+  "forced": true,
+  "cli_forced": true,
+  "download_page": "https://mirrorstages.com/app",
+  "auth_download": {
+    "darwin": "https://cnb.cool/mirrorstages/gost/-/git/raw/main/latest/mirrorstages.dmg",
+    "windows": "https://cnb.cool/mirrorstages/gost/-/git/raw/main/latest/mirrorstages.msi",
+    "linux": "https://cnb.cool/mirrorstages/gost/-/git/raw/main/latest/mirrorstages.deb"
+  },
+  "cli_download": {
+    "darwin-arm64": "https://cnb.cool/mirrorstages/gost/-/git/raw/main/latest/cli/mstages-darwin-arm64",
+    "linux-amd64": "https://cnb.cool/mirrorstages/gost/-/git/raw/main/latest/cli/mstages-linux-amd64"
+  }
+}

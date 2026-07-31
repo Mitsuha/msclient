@@ -53,7 +53,9 @@ class DashboardPage extends StatelessWidget {
                 children: [
                   Expanded(
                     child: ToolCard(
-                      leading: const _CodexBadge(),
+                      leading: const _ToolBadge(
+                        asset: 'assets/images/chatgpt-icon.png',
+                      ),
                       title: 'Codex',
                       subtitle: 'OpenAI CLI',
                       status: snapshot.codex,
@@ -66,7 +68,9 @@ class DashboardPage extends StatelessWidget {
                   const SizedBox(width: 18),
                   Expanded(
                     child: ToolCard(
-                      leading: const _ClaudeBadge(),
+                      leading: const _ToolBadge(
+                        asset: 'assets/images/claude-ai-icon.png',
+                      ),
                       title: 'Claude Code',
                       subtitle: 'Anthropic CLI',
                       status: snapshot.claude,
@@ -80,10 +84,9 @@ class DashboardPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 18),
-            SectionCard(
-              title: '订阅',
-              child: SubscriptionSummary(packs: packs),
-            ),
+            const SectionHeading('订阅'),
+            const SizedBox(height: 8),
+            SubscriptionSummary(packs: packs),
           ],
         ),
       ),
@@ -124,52 +127,14 @@ class _Toolbar extends StatelessWidget {
   }
 }
 
-/// The dark terminal tile that brands the Codex card.
-class _CodexBadge extends StatelessWidget {
-  const _CodexBadge();
+/// The vendor logo that brands a tool card.
+class _ToolBadge extends StatelessWidget {
+  const _ToolBadge({required this.asset});
+
+  final String asset;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 48,
-      height: 48,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: AppColors.label,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: const Text(
-        '>_',
-        style: TextStyle(
-          color: CupertinoColors.white,
-          fontSize: 20,
-          fontWeight: FontWeight.w700,
-          height: 1,
-        ),
-      ),
-    );
-  }
-}
-
-/// The coral sparkles tile that brands the Claude Code card.
-class _ClaudeBadge extends StatelessWidget {
-  const _ClaudeBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 48,
-      height: 48,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: AppColors.claudeBrand,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: const Icon(
-        CupertinoIcons.sparkles,
-        color: CupertinoColors.white,
-        size: 24,
-      ),
-    );
+    return Image.asset(asset, width: 48, height: 48, fit: BoxFit.contain);
   }
 }

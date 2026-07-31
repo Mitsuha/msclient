@@ -238,6 +238,11 @@ class _FakeAppService implements AppService {
   }
 
   @override
+  Future<void> openApiKeysConsole() {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<void> openRegister() async {}
 
   @override

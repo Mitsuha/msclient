@@ -1,18 +1,13 @@
-import 'dart:io';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Opens URLs in the system default browser.
 class ExternalBrowser {
   const ExternalBrowser();
 
   Future<void> open(String url) async {
-    if (Platform.isMacOS) {
-      await Process.run('open', [url]);
-      return;
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      throw StateError('Could not open $url');
     }
-    if (Platform.isWindows) {
-      await Process.run('cmd', ['/c', 'start', '', url]);
-      return;
-    }
-    await Process.run('xdg-open', [url]);
   }
 }

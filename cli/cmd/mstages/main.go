@@ -25,6 +25,12 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Update before doing anything else: the new binary takes over from the
+	// next invocation, so there is nothing to unwind.
+	if cli.UpdateGate(ctx) {
+		os.Exit(0)
+	}
+
 	switch invokedName() {
 	case "mcodex":
 		os.Exit(tools.Run(ctx, tools.Codex))

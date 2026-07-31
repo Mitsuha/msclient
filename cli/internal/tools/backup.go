@@ -29,6 +29,18 @@ type fileBackup struct {
 	present map[string]bool
 }
 
+// hasBackupDir reports whether a tool's config directory holds a backup left
+// by an earlier run. dirFunc is the tool's config-directory resolver; it is not
+// called for its side effects, so no directory is created.
+func hasBackupDir(dirFunc func() (string, error)) bool {
+	dir, err := dirFunc()
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(filepath.Join(dir, backupDirName))
+	return err == nil
+}
+
 func newFileBackup(dir string, files []string, move bool) *fileBackup {
 	return &fileBackup{dir: dir, files: files, move: move, present: map[string]bool{}}
 }
@@ -77,7 +89,12 @@ func (b *fileBackup) Perform() error {
 // Restore puts the original files back and removes the backup directory. Files
 // that were absent originally are deleted (the CLI's writes are undone).
 func (b *fileBackup) Restore() error {
-	if b.present == nil || len(b.present) == 0 {
+	// Nothing was ever backed up for this tool — the cleanup path calls
+	// Restore for every tool, including ones this machine never launched.
+	if _, err := os.Stat(b.backupPath()); os.IsNotExist(err) {
+		return nil
+	}
+	if len(b.present) == 0 {
 		// In-memory state lost (recovery path); fall back to the manifest.
 		if err := b.readManifest(); err != nil {
 			return err

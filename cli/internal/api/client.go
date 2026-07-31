@@ -50,6 +50,10 @@ func (e *Error) Error() string {
 // Unauthorized reports whether the error is an HTTP 401.
 func (e *Error) Unauthorized() bool { return e.StatusCode == http.StatusUnauthorized }
 
+// NoAvailableAccount reports whether the backend's account pool is exhausted,
+// which it signals with a 503 and this error code.
+func (e *Error) NoAvailableAccount() bool { return e.Err == "api.error.no_available_account" }
+
 func (c *Client) url(path string) string {
 	return c.baseURL + path
 }

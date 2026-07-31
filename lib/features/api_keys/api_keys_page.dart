@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:desktop/data/models/api_key_models.dart';
 import 'package:desktop/domain/api_keys/api_key_activation.dart';
 import 'package:desktop/features/api_keys/api_key_activation_dialog.dart';
@@ -15,8 +17,11 @@ class ApiKeysPage extends StatelessWidget {
     required this.apiKeys,
     required this.isLoading,
     required this.onRefresh,
+    required this.onManage,
     required this.onActivate,
     required this.isInUse,
+    required this.isCodexInitialized,
+    required this.isClaudeInitialized,
     this.errorMessage,
   });
 
@@ -25,17 +30,20 @@ class ApiKeysPage extends StatelessWidget {
   final String? errorMessage;
   final VoidCallback onRefresh;
 
+  /// Opens the web console, where keys are created and revoked.
+  final VoidCallback onManage;
+
   /// Writes [ApiKeyActivation] into the local tool configs for the given key.
   final void Function(ApiKey apiKey, ApiKeyActivation activation) onActivate;
 
   /// Whether a tool's config already points at this key — read from disk, not
   /// from the server's own `enabled` flag.
   final bool Function(ApiKey apiKey) isInUse;
+  final bool isCodexInitialized;
+  final bool isClaudeInitialized;
 
   @override
   Widget build(BuildContext context) {
-    final enabledCount = apiKeys.where((apiKey) => apiKey.enabled).length;
-
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(30, 26, 30, 24),
@@ -43,17 +51,25 @@ class ApiKeysPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _Toolbar(
-              total: apiKeys.length,
-              enabledCount: enabledCount,
               isLoading: isLoading,
               onRefresh: onRefresh,
+              onManage: onManage,
             ),
             if (errorMessage != null) ...[
               const SizedBox(height: 16),
               ErrorBanner(message: errorMessage!),
             ],
             const SizedBox(height: 22),
-            const _SectionLabel('密钥列表'),
+            const _DirectConnectionTip(),
+            if (isCodexInitialized || isClaudeInitialized) ...[
+              const SizedBox(height: 8),
+              _DirectConnectionWarning(
+                isCodexInitialized: isCodexInitialized,
+                isClaudeInitialized: isClaudeInitialized,
+              ),
+            ],
+            const SizedBox(height: 14),
+            const _SectionLabel('API keys'),
             const SizedBox(height: 10),
             // The skeleton only replaces the list on the very first load; a
             // refresh keeps the current cards on screen.
@@ -67,6 +83,141 @@ class ApiKeysPage extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DirectConnectionWarning extends StatelessWidget {
+  const _DirectConnectionWarning({
+    required this.isCodexInitialized,
+    required this.isClaudeInitialized,
+  });
+
+  final bool isCodexInitialized;
+  final bool isClaudeInitialized;
+
+  @override
+  Widget build(BuildContext context) {
+    final tools = [
+      if (isCodexInitialized) 'Codex',
+      if (isClaudeInitialized) 'Claude Code',
+    ].join('和');
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: BoxDecoration(
+        color: AppColors.orangeTintBackground,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.orangeTintBorder),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            CupertinoIcons.exclamationmark_triangle_fill,
+            color: AppColors.orange,
+            size: 16,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '目前 $tools 是直连状态，切换为 API 模式会可能会丢失账号的直连',
+              style: const TextStyle(color: AppColors.orange, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The two halves of the same advice, shown one at a time: account mode is the
+/// recommended path, and API keys are the fallback. Rotating them keeps the
+/// banner one line tall instead of a paragraph nobody reads.
+const List<String> _tips = [
+  '推荐使用账号直连，价格更低更稳定，请在『控制面板』获取账号',
+  'API Key 仅在直连不满足需求时以传统的方式配置 Codex、Claude Code',
+];
+
+/// How long each tip holds before the next one slides in.
+const Duration _tipInterval = Duration(seconds: 5);
+
+/// Blue-tinted advisory above the key list, cycling through [_tips].
+class _DirectConnectionTip extends StatefulWidget {
+  const _DirectConnectionTip();
+
+  @override
+  State<_DirectConnectionTip> createState() => _DirectConnectionTipState();
+}
+
+class _DirectConnectionTipState extends State<_DirectConnectionTip> {
+  Timer? _timer;
+  int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(_tipInterval, (_) {
+      setState(() => _index = (_index + 1) % _tips.length);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: BoxDecoration(
+        color: AppColors.blue.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            CupertinoIcons.info_circle_fill,
+            color: AppColors.blue,
+            size: 16,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 320),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              // The outgoing tip leaves upward while the incoming one rises
+              // into place, so the banner reads as one line being replaced
+              // rather than two lines briefly overlapping.
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.6),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                ),
+              ),
+              // Both tips occupy the same slot; without this the default Stack
+              // centers them and the text drifts as lengths change.
+              layoutBuilder: (current, previous) => Stack(
+                alignment: Alignment.centerLeft,
+                children: [...previous, ?current],
+              ),
+              child: Text(
+                _tips[_index],
+                key: ValueKey(_index),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: AppColors.blue, fontSize: 12),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -118,16 +269,14 @@ class _Panel extends StatelessWidget {
 
 class _Toolbar extends StatelessWidget {
   const _Toolbar({
-    required this.total,
-    required this.enabledCount,
     required this.isLoading,
     required this.onRefresh,
+    required this.onManage,
   });
 
-  final int total;
-  final int enabledCount;
   final bool isLoading;
   final VoidCallback onRefresh;
+  final VoidCallback onManage;
 
   @override
   Widget build(BuildContext context) {
@@ -149,7 +298,7 @@ class _Toolbar extends StatelessWidget {
               ),
               SizedBox(height: 6),
               Text(
-                '使用 API Key 的方式来配置 Codex/Claude Code',
+                '使用类似 CC Switch 的方式来配置 Codex/Claude Code，在直连不满足需求时候使用。',
                 style: TextStyle(
                   color: AppColors.secondaryLabel,
                   fontSize: 12.5,
@@ -165,14 +314,12 @@ class _Toolbar extends StatelessWidget {
           padding: const EdgeInsets.only(top: 2),
           child: Row(
             children: [
-              if (total > 0) ...[
-                _CountPill(enabledCount: enabledCount, total: total),
-                const SizedBox(width: 10),
-              ],
               if (isLoading) ...[
                 const CupertinoActivityIndicator(radius: 8),
                 const SizedBox(width: 10),
               ],
+              _ManageIcon(onPressed: onManage),
+              const SizedBox(width: 12),
               GhostButton(
                 label: '刷新',
                 icon: CupertinoIcons.arrow_clockwise,
@@ -186,45 +333,46 @@ class _Toolbar extends StatelessWidget {
   }
 }
 
-/// "● 6/13 已启用" — a status pill rather than loose gray text, with a live dot
-/// that goes green once at least one key is on.
-class _CountPill extends StatelessWidget {
-  const _CountPill({required this.enabledCount, required this.total});
+/// A bare icon — no fill, no border, no press animation — that tints light blue
+/// on hover. Deliberately quieter than [GhostButton]: managing keys happens on
+/// the web, so this is a pointer, not an action the page owns.
+class _ManageIcon extends StatefulWidget {
+  const _ManageIcon({required this.onPressed});
 
-  final int enabledCount;
-  final int total;
+  final VoidCallback onPressed;
+
+  @override
+  State<_ManageIcon> createState() => _ManageIconState();
+}
+
+class _ManageIconState extends State<_ManageIcon> {
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    final active = enabledCount > 0;
-    return Container(
-      height: 28,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: AppColors.hoverBackground,
-        borderRadius: BorderRadius.circular(7),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 5,
-            height: 5,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: active ? AppColors.green : AppColors.placeholderText,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          height: 16,
+          child: Center(
+            child: TweenAnimationBuilder<Color?>(
+              tween: ColorTween(
+                end: _hovered
+                    ? AppColors.blue.withValues(alpha: 0.65)
+                    : AppColors.secondaryLabel,
+              ),
+              duration: const Duration(milliseconds: 130),
+              curve: Curves.easeOut,
+              builder: (context, color, _) =>
+                  Icon(CupertinoIcons.square_pencil, size: 16, color: color),
             ),
           ),
-          const SizedBox(width: 7),
-          Text(
-            '$enabledCount/$total 已启用',
-            style: const TextStyle(
-              color: AppColors.secondaryLabel,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -335,6 +335,10 @@ class AppViewModel extends ChangeNotifier {
     await _service.openRegister();
   }
 
+  Future<void> openApiKeysConsole() async {
+    await _service.openApiKeysConsole();
+  }
+
   /// Runs a billing re-allocation like [_run], but reports its outcome as a
   /// [BillingOutcome] so the card can react per-case. An empty account pool
   /// (`no_available_account`) is surfaced by the caller as a dedicated dialog,

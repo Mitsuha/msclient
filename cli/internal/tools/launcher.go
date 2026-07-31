@@ -25,6 +25,13 @@ func launch(ctx context.Context, executable string, args []string) (int, error) 
 	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()
 
+	// The child shares our foreground process group, so the terminal delivers
+	// Ctrl-C and Ctrl-Z straight to it. Stop reacting to those ourselves for
+	// the duration: the child owns the terminal, and cleanup must be driven by
+	// its exit alone, never by a signal that arrives while it is still alive.
+	restore := ignoreTerminalSignals()
+	defer restore()
+
 	if err := cmd.Start(); err != nil {
 		return 0, fmt.Errorf("start %s: %w", executable, err)
 	}
