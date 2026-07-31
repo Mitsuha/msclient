@@ -26,59 +26,73 @@ class AppSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const cornerRadius = Radius.circular(3);
+    final topRight = Platform.isWindows ? cornerRadius : Radius.zero;
     return Container(
       width: 190,
-      decoration: const BoxDecoration(
-        color: AppColors.sidebarBackground,
-        border: Border(right: BorderSide(color: AppColors.strongBorder)),
+      padding: EdgeInsets.only(right: 1, top: Platform.isWindows ? 1 : 0),
+      decoration: BoxDecoration(
+        color: AppColors.strongBorder,
+        borderRadius: BorderRadius.only(topRight: topRight),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (!Platform.isWindows) ...[
-            const DragToMoveArea(
-              child: SizedBox(height: 16, width: double.infinity),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.sidebarBackground,
+          borderRadius: BorderRadius.only(
+            topRight: Radius.circular(topRight.x > 0 ? topRight.x - 1 : 0),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!Platform.isWindows) ...[
+              const DragToMoveArea(
+                child: SizedBox(height: 16, width: double.infinity),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsetsGeometry.only(
+                  left: 18,
+                  right: 18,
+                  top: 8,
+                ),
+                child: Text(
+                  'Mirrorstages',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+            SizedBox(height: Platform.isWindows ? 12 : 18),
+
+            _SidebarItem(
+              icon: CupertinoIcons.slider_horizontal_3,
+              label: '控制面板',
+              selected: selectedSection == NavSection.dashboard,
+              onPressed: () => onSelectSection(NavSection.dashboard),
             ),
-            const SizedBox(height: 12),
+            _SidebarItem(
+              icon: CupertinoIcons.hammer,
+              label: 'API Keys',
+              selected: selectedSection == NavSection.apiKeys,
+              onPressed: () => onSelectSection(NavSection.apiKeys),
+            ),
+            _SidebarItem(
+              icon: CupertinoIcons.gear,
+              label: '设置',
+              selected: selectedSection == NavSection.settings,
+              onPressed: () => onSelectSection(NavSection.settings),
+            ),
+            const Spacer(),
+            const ContactSupportItem(),
+            const SizedBox(height: 6),
+            if (account != null)
+              AccountMenu(
+                account: account!,
+                onOpenAccount: onOpenAccount,
+                onLogout: onLogout,
+              ),
           ],
-          Padding(
-            padding: Platform.isWindows
-                ? EdgeInsetsGeometry.symmetric(horizontal: 18)
-                : const EdgeInsetsGeometry.only(left: 18, right: 18, top: 8),
-            child: Text(
-              'Mirrorstages',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-          ),
-          const SizedBox(height: 18),
-          _SidebarItem(
-            icon: CupertinoIcons.slider_horizontal_3,
-            label: '控制面板',
-            selected: selectedSection == NavSection.dashboard,
-            onPressed: () => onSelectSection(NavSection.dashboard),
-          ),
-          _SidebarItem(
-            icon: CupertinoIcons.hammer,
-            label: 'API Keys',
-            selected: selectedSection == NavSection.apiKeys,
-            onPressed: () => onSelectSection(NavSection.apiKeys),
-          ),
-          _SidebarItem(
-            icon: CupertinoIcons.gear,
-            label: '设置',
-            selected: selectedSection == NavSection.settings,
-            onPressed: () => onSelectSection(NavSection.settings),
-          ),
-          const Spacer(),
-          const ContactSupportItem(),
-          const SizedBox(height: 6),
-          if (account != null)
-            AccountMenu(
-              account: account!,
-              onOpenAccount: onOpenAccount,
-              onLogout: onLogout,
-            ),
-        ],
+        ),
       ),
     );
   }

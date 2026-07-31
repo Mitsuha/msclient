@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:desktop/app/app.dart';
 import 'package:desktop/ui/app_colors.dart';
 import 'package:flutter/cupertino.dart';
@@ -8,13 +10,12 @@ Future<void> main() async {
   await windowManager.ensureInitialized();
   await windowManager.setPreventClose(true);
 
-  const windowOptions = WindowOptions(
+  final windowOptions = WindowOptions(
     size: Size(980, 640),
     minimumSize: Size(860, 560),
     center: true,
     title: 'Mirrorstages',
-    backgroundColor: AppColors.windowBackground,
-    titleBarStyle: TitleBarStyle.hidden,
+    titleBarStyle: Platform.isWindows ? null : TitleBarStyle.hidden,
     windowButtonVisibility: true,
   );
 
