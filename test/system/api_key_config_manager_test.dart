@@ -82,7 +82,7 @@ void main() {
       expect(toml, contains('requires_openai_auth = true'));
       expect(
         toml,
-        contains('base_url = "https://api.mirrorstages.com/openai"'),
+        contains('base_url = "https://api.mirrorstages.com/openai/v1"'),
       );
     });
 

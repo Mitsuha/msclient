@@ -25,7 +25,7 @@ abstract final class AppConfig {
       'https://api.mirrorstages.com/anthropic';
 
   /// OpenAI-compatible endpoint Codex is pointed at when a key is activated.
-  static const String openaiBaseUrl = 'https://api.mirrorstages.com/openai';
+  static const String openaiBaseUrl = 'https://api.mirrorstages.com/openai/v1';
 
   /// Key of the `[model_providers.*]` table written into Codex's `config.toml`;
   /// `model_provider` must name it for Codex to resolve the provider.

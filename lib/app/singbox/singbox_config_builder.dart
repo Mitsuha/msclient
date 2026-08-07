@@ -60,6 +60,7 @@ class SingboxConfigBuilder {
     'claude.ai',
     'api.anthropic.com',
     'platform.claude.com',
+    'ipinfo.io',
   ];
 
   /// [networkProxyUrl] is the optional upstream HTTP proxy for the traffic that
