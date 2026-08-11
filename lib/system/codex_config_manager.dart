@@ -139,6 +139,8 @@ class CodexConfigManager implements ToolConfigManager {
       final env = parseEnvLines(await envFile.readAsLines());
       return env['http_proxy'] == AppConfig.singboxLocalProxyUrl &&
           env['https_proxy'] == AppConfig.singboxLocalProxyUrl &&
+          env['no_proxy'] == AppConfig.noProxyHosts &&
+          env['NO_PROXY'] == AppConfig.noProxyHosts &&
           env['SSL_CERT_FILE'] == await _certificatePath();
     } catch (_) {
       return false;
@@ -153,6 +155,8 @@ class CodexConfigManager implements ToolConfigManager {
     final env = await _readEnv(envFile);
     env['http_proxy'] = proxyUrl;
     env['https_proxy'] = proxyUrl;
+    env['no_proxy'] = AppConfig.noProxyHosts;
+    env['NO_PROXY'] = AppConfig.noProxyHosts;
     env['SSL_CERT_FILE'] = '"${await _certificatePath()}"';
     await envFile.writeAsString(serializeEnv(env));
   }
@@ -178,6 +182,8 @@ class CodexConfigManager implements ToolConfigManager {
     final env = await _readEnv(envFile)
       ..remove('http_proxy')
       ..remove('https_proxy')
+      ..remove('no_proxy')
+      ..remove('NO_PROXY')
       ..remove('SSL_CERT_FILE');
     if (env.isEmpty) {
       await envFile.delete();
@@ -402,6 +408,49 @@ bool configTomlHasProvider(String content) {
     }
   }
   return false;
+}
+
+/// Top-level `config.toml` keys MirrorStages owns: rewriting the file replaces
+/// these lines, everything else the user keeps is preserved verbatim.
+const _managedCodexTomlKeys = {
+  'model_provider',
+  'model',
+  'model_reasoning_effort',
+  'disable_response_storage',
+};
+
+/// Strips MirrorStages-owned entries from a `config.toml` string, leaving every
+/// other line untouched.
+///
+/// Removed are the top-level [_managedCodexTomlKeys] assignments — only those
+/// before the first table header, so a `model` inside e.g. `[profiles.foo]`
+/// survives — plus the whole `[model_providers.<codexProviderKey>]` table,
+/// which the rewrite re-emits (a duplicate table would not parse).
+String stripManagedCodexToml(String content) {
+  const managedTable = '[model_providers.${AppConfig.codexProviderKey}]';
+  final kept = <String>[];
+  var inTopLevel = true;
+  var inManagedTable = false;
+  for (final rawLine in const LineSplitter().convert(content)) {
+    final line = rawLine.trim();
+    if (line.startsWith('[')) {
+      inTopLevel = false;
+      inManagedTable = line == managedTable;
+      if (inManagedTable) {
+        continue;
+      }
+    } else if (inManagedTable) {
+      continue;
+    } else if (inTopLevel && !line.startsWith('#')) {
+      final separator = line.indexOf('=');
+      if (separator > 0 &&
+          _managedCodexTomlKeys.contains(line.substring(0, separator).trim())) {
+        continue;
+      }
+    }
+    kept.add(rawLine);
+  }
+  return kept.join('\n');
 }
 
 class CodexConfigRestoreException implements Exception {

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 )
 
@@ -35,6 +36,23 @@ func DecodePayload(token string) (map[string]any, error) {
 func String(claims map[string]any, key string) string {
 	s, _ := claims[key].(string)
 	return s
+}
+
+// Int reads a numeric claim. JSON numbers decode as float64, but the backend
+// also emits some ids as strings, so both are accepted. The second result
+// reports whether the claim was present and numeric.
+func Int(claims map[string]any, key string) (int, bool) {
+	switch v := claims[key].(type) {
+	case float64:
+		return int(v), true
+	case string:
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return 0, false
+		}
+		return n, true
+	}
+	return 0, false
 }
 
 // Object reads a nested object claim, returning nil when absent.

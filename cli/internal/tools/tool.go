@@ -36,9 +36,10 @@ type tool interface {
 	// reads its manifest from disk, so it works even when the backup was taken
 	// by a different mstages process.
 	restoreBackup() error
-	// requestAccount asks the backend for an account. It performs no disk
-	// writes, so the caller can back up the user's config in between.
-	requestAccount(ctx context.Context, token string) (*pendingAccount, error)
+	// requestAccount asks the backend for an account billed against userPackID
+	// (0 = 按量计费). It performs no disk writes, so the caller can back up the
+	// user's config in between.
+	requestAccount(ctx context.Context, token string, userPackID int) (*pendingAccount, error)
 	// writeAccount persists a previously requested account.
 	writeAccount(pending *pendingAccount) error
 	// applyProxy writes the loopback proxy and CA settings. It is idempotent

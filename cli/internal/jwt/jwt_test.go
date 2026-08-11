@@ -57,3 +57,18 @@ func TestStringAndObjectMissingKeys(t *testing.T) {
 		t.Error("missing object claim should yield nil")
 	}
 }
+
+func TestInt(t *testing.T) {
+	claims := map[string]any{"n": float64(42), "s": "42", "bad": "x", "obj": map[string]any{}}
+	for key, want := range map[string]int{"n": 42, "s": 42} {
+		got, ok := Int(claims, key)
+		if !ok || got != want {
+			t.Errorf("Int(%q) = (%d, %v), want (%d, true)", key, got, ok, want)
+		}
+	}
+	for _, key := range []string{"bad", "obj", "missing"} {
+		if got, ok := Int(claims, key); ok {
+			t.Errorf("Int(%q) = (%d, true), want not-ok", key, got)
+		}
+	}
+}

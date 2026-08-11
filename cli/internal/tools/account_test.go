@@ -152,3 +152,36 @@ func TestCodexAccountUndecodable(t *testing.T) {
 		t.Errorf("expected nil for empty tokens, got %+v", info)
 	}
 }
+
+func TestCodexUserPackID(t *testing.T) {
+	cases := map[string]int{
+		`{"user_pack_id":42}`:   42,
+		`{"user_pack_id":"42"}`: 42,
+		`{"user_pack_id":0}`:    0,
+		`{}`:                    0,
+		`{"user_pack_id":"xx"}`: 0,
+	}
+	for payload, want := range cases {
+		if got := codexUserPackID(jwtToken(payload)); got != want {
+			t.Errorf("codexUserPackID(%s) = %d, want %d", payload, got, want)
+		}
+	}
+	if got := codexUserPackID("not-a-jwt"); got != 0 {
+		t.Errorf("codexUserPackID(non-jwt) = %d, want 0", got)
+	}
+}
+
+func TestCodexAccountCarriesUserPackID(t *testing.T) {
+	// The pack lives on the access token, not the id token.
+	tokens := codexTokens([]byte(`{"tokens":{
+		"access_token":"` + jwtToken(`{"user_id":"u-1","user_pack_id":42}`) + `",
+		"id_token":"` + jwtToken(`{"email":"id@x.com"}`) + `"
+	}}`))
+	info := codexAccount(tokens)
+	if info == nil {
+		t.Fatal("expected account info")
+	}
+	if info.UserPackID != 42 {
+		t.Errorf("UserPackID = %d, want 42", info.UserPackID)
+	}
+}

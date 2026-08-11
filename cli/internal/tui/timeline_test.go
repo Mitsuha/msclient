@@ -10,7 +10,6 @@ import (
 // which is what a piped stderr gets.
 func newTestTimeline(buf *bytes.Buffer) *Timeline {
 	tl := newTimeline(buf, false, "MirrorStages")
-	tl.minStep = 0
 	buf.Reset() // drop the header; the tests are about the nodes
 	return tl
 }

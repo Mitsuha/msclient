@@ -60,6 +60,10 @@ abstract final class AppConfig {
   static const String singboxLocalProxyUrl =
       'http://$singboxHost:$singboxProxyPort';
 
+  /// Loopback hosts written as `no_proxy` / `NO_PROXY` alongside the proxy, so
+  /// the tools reach local services directly instead of through sing-box.
+  static const String noProxyHosts = 'localhost,127.0.0.1,::1';
+
   /// Base URI of the Clash API.
   static Uri get singboxClashApiBaseUri =>
       Uri.parse('http://$singboxHost:$singboxApiPort');

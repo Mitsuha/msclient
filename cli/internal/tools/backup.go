@@ -23,9 +23,12 @@ const manifestName = ".manifest.json"
 // (restore) a backup left behind by a previously crashed run before creating a
 // new one.
 type fileBackup struct {
-	dir     string
-	files   []string
-	move    bool
+	dir   string
+	files []string
+	move  bool
+	// keep names files that are copied even when move is true, because the CLI
+	// edits them in place instead of replacing them wholesale.
+	keep    map[string]bool
 	present map[string]bool
 }
 
@@ -42,8 +45,26 @@ func hasBackupDir(dirFunc func() (string, error)) bool {
 }
 
 func newFileBackup(dir string, files []string, move bool) *fileBackup {
-	return &fileBackup{dir: dir, files: files, move: move, present: map[string]bool{}}
+	return &fileBackup{
+		dir:     dir,
+		files:   files,
+		move:    move,
+		keep:    map[string]bool{},
+		present: map[string]bool{},
+	}
 }
+
+// keepInPlace marks files the CLI rewrites rather than replaces, so the backup
+// copies them and leaves the live file where the tool expects it.
+func (b *fileBackup) keepInPlace(names ...string) *fileBackup {
+	for _, name := range names {
+		b.keep[name] = true
+	}
+	return b
+}
+
+// moves reports whether name is relocated into the backup directory.
+func (b *fileBackup) moves(name string) bool { return b.move && !b.keep[name] }
 
 func (b *fileBackup) backupPath() string { return filepath.Join(b.dir, backupDirName) }
 
@@ -73,7 +94,7 @@ func (b *fileBackup) Perform() error {
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return err
 		}
-		if b.move {
+		if b.moves(name) {
 			if err := os.Rename(src, dst); err != nil {
 				return err
 			}
@@ -112,7 +133,7 @@ func (b *fileBackup) Restore() error {
 			}
 			// Overwrite the CLI-written file with the original.
 			_ = os.Remove(live)
-			if b.move {
+			if b.moves(name) {
 				if err := os.Rename(backup, live); err != nil && firstErr == nil {
 					firstErr = err
 				}

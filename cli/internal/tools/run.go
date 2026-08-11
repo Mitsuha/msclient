@@ -98,28 +98,35 @@ func startService(ctx context.Context, tl *tui.Timeline, binaryPath string) erro
 // tool, or requests a new one. Only the "new account" path touches the user's
 // original config, and only that path backs it up — backing up on every launch
 // would snapshot our own config over the user's after the first run.
+//
+// An account is only reusable when it bills against the pack the user picked
+// with `mstages switch billing`; otherwise a fresh one is requested, which is
+// how a billing switch takes effect.
 func ensureAccount(ctx context.Context, tl *tui.Timeline, t tool, token string) error {
 	tl.Start("正在获取账号")
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
 
 	existing, err := t.account()
 	if err != nil {
 		return err
 	}
 
-	if existing != nil {
+	if existing != nil && existing.UserPackID == cfg.UserPackID {
 		tl.Done("使用账号")
 		printAccount(tl, existing)
-		tl.Pause()
 		return t.applyProxy()
 	}
 
-	pending, err := t.requestAccount(ctx, token)
+	pending, err := t.requestAccount(ctx, token, cfg.UserPackID)
 	if err != nil {
 		return accountError(t, err)
 	}
 	tl.Done("已申请到账号")
 	printAccount(tl, pending.info)
-	tl.Pause()
 
 	// 3. Back up before the first overwrite.
 	tl.Start("正在备份配置")

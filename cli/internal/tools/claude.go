@@ -126,7 +126,8 @@ func (c *claudeTool) account() (*accountInfo, error) {
 		return nil, err
 	}
 	token := claudeAccessToken([]byte(content))
-	if _, ok := claudeUserPackID(token); !ok {
+	packID, ok := claudeUserPackID(token)
+	if !ok {
 		return nil, nil
 	}
 
@@ -145,16 +146,17 @@ func (c *claudeTool) account() (*accountInfo, error) {
 		_ = json.Unmarshal(raw, &profile)
 	}
 	return &accountInfo{
-		Email:    profile.OauthAccount.EmailAddress,
-		Username: profile.OauthAccount.DisplayName,
-		Plan:     claudePlan(profile.OauthAccount.Tier),
+		Email:      profile.OauthAccount.EmailAddress,
+		Username:   profile.OauthAccount.DisplayName,
+		Plan:       claudePlan(profile.OauthAccount.Tier),
+		UserPackID: packID,
 	}, nil
 }
 
 // requestAccount asks the backend for a fresh Claude account. Nothing is
 // written yet, so the caller can still back up the user's original config.
-func (c *claudeTool) requestAccount(ctx context.Context, token string) (*pendingAccount, error) {
-	raw, err := api.New().ClaudeAuth(ctx, token, 0)
+func (c *claudeTool) requestAccount(ctx context.Context, token string, userPackID int) (*pendingAccount, error) {
+	raw, err := api.New().ClaudeAuth(ctx, token, userPackID)
 	if err != nil {
 		return nil, err
 	}
@@ -168,12 +170,14 @@ func (c *claudeTool) requestAccount(ctx context.Context, token string) (*pending
 	if err := json.Unmarshal(raw, &resp); err != nil {
 		return nil, err
 	}
+	granted, _ := claudeUserPackID(claudeAccessToken(raw))
 	return &pendingAccount{
 		raw: raw,
 		info: &accountInfo{
-			Email:    resp.OauthAccount.EmailAddress,
-			Username: resp.OauthAccount.DisplayName,
-			Plan:     claudePlan(resp.OauthAccount.Tier),
+			Email:      resp.OauthAccount.EmailAddress,
+			Username:   resp.OauthAccount.DisplayName,
+			Plan:       claudePlan(resp.OauthAccount.Tier),
+			UserPackID: granted,
 		},
 	}, nil
 }

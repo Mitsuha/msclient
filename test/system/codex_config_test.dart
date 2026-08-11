@@ -49,6 +49,8 @@ void main() {
         await File('${home.path}/.codex/.env').writeAsString(
           'http_proxy=${AppConfig.singboxLocalProxyUrl}\n'
           'https_proxy=${AppConfig.singboxLocalProxyUrl}\n'
+          'no_proxy=${AppConfig.noProxyHosts}\n'
+          'NO_PROXY=${AppConfig.noProxyHosts}\n'
           'SSL_CERT_FILE=${home.path}/.mstages/ms.cer\n',
         );
 

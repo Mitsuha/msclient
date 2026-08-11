@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mirrorstages/mstages/internal/api"
 	"github.com/mirrorstages/mstages/internal/app"
@@ -12,7 +13,7 @@ import (
 )
 
 // codexTool manages ~/.codex: a .env with proxy vars, an auth.json holding
-// MirrorStages credentials, and removal of any config.toml provider override.
+// MirrorStages credentials, and a config.toml stripped of provider overrides.
 type codexTool struct {
 	fb *fileBackup
 }
@@ -32,8 +33,10 @@ func (c *codexTool) fileBackup() (*fileBackup, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	// Move semantics, matching desktop codex_config_backup.dart.
-	c.fb = newFileBackup(dir, []string{"auth.json", "config.toml", ".env"}, true)
+	// Move semantics, matching desktop codex_config_backup.dart — except for
+	// config.toml, which is edited key by key and so has to stay in place.
+	c.fb = newFileBackup(dir, []string{"auth.json", "config.toml", ".env"}, true).
+		keepInPlace("config.toml")
 	return c.fb, nil
 }
 
@@ -82,8 +85,8 @@ func (c *codexTool) account() (*accountInfo, error) {
 
 // requestAccount asks the backend for a fresh Codex account. Nothing is
 // written yet, so the caller can still back up the user's original config.
-func (c *codexTool) requestAccount(ctx context.Context, token string) (*pendingAccount, error) {
-	raw, err := api.New().CodexAuth(ctx, token, 0)
+func (c *codexTool) requestAccount(ctx context.Context, token string, userPackID int) (*pendingAccount, error) {
+	raw, err := api.New().CodexAuth(ctx, token, userPackID)
 	if err != nil {
 		return nil, err
 	}
@@ -102,8 +105,8 @@ func (c *codexTool) writeAccount(pending *pendingAccount) error {
 	return c.writeAuth(dir, pending.raw)
 }
 
-// applyProxy points Codex at the loopback proxy and drops any provider
-// override so the account credentials are used.
+// applyProxy points Codex at the loopback proxy and drops the provider
+// override keys so the account credentials are used.
 func (c *codexTool) applyProxy() error {
 	dir, err := app.CodexDir()
 	if err != nil {
@@ -115,7 +118,7 @@ func (c *codexTool) applyProxy() error {
 	if err := c.writeProxyEnv(dir); err != nil {
 		return err
 	}
-	return c.clearProviderConfig(dir)
+	return c.pruneProviderConfig(dir)
 }
 
 // writeProxyEnv merges the lowercase proxy vars into ~/.codex/.env, preserving
@@ -165,12 +168,54 @@ func writeInstallationID(dir string, authJSON []byte) error {
 	return os.WriteFile(filepath.Join(dir, "installation_id"), []byte(doc.InstallationID), 0o644)
 }
 
-// clearProviderConfig deletes config.toml so Codex falls back to the default
-// MirrorStages provider.
-func (c *codexTool) clearProviderConfig(dir string) error {
+// managedTOMLKeys are the config.toml assignments that would override the
+// account credentials or the model MirrorStages serves. Everything else in the
+// file is the user's and is written back untouched.
+var managedTOMLKeys = map[string]bool{
+	"model_provider":           true,
+	"model":                    true,
+	"model_reasoning_effort":   true,
+	"disable_response_storage": true,
+}
+
+// pruneProviderConfig drops the managed keys from config.toml so Codex falls
+// back to the default MirrorStages provider, keeping the rest of the user's
+// settings. The original file is restored wholesale on exit.
+func (c *codexTool) pruneProviderConfig(dir string) error {
 	path := filepath.Join(dir, "config.toml")
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return err
 	}
-	return nil
+	pruned := pruneTOMLKeys(string(raw))
+	if pruned == string(raw) {
+		return nil
+	}
+	return os.WriteFile(path, []byte(pruned), 0o644)
+}
+
+// pruneTOMLKeys removes whole lines assigning a managed key. The parse is
+// deliberately shallow — split each line on its first "=" — but it does track
+// table headers, so a `model = …` inside the user's own [model_providers.x]
+// table is left alone; only top-level assignments are ours to remove.
+func pruneTOMLKeys(content string) string {
+	lines := strings.Split(content, "\n")
+	kept := make([]string, 0, len(lines))
+	topLevel := true
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") {
+			topLevel = false
+		}
+		if topLevel && !strings.HasPrefix(trimmed, "#") {
+			if key, _, ok := strings.Cut(trimmed, "="); ok && managedTOMLKeys[strings.TrimSpace(key)] {
+				continue
+			}
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
 }

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:desktop/app/app_config.dart';
 import 'package:desktop/domain/api_keys/active_api_keys.dart';
 import 'package:desktop/domain/api_keys/api_key_activation.dart';
+import 'package:desktop/system/codex_config_manager.dart';
 import 'package:desktop/system/home_directory.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
@@ -91,9 +92,13 @@ class ApiKeyConfigManager {
     await File(
       path.join(directory.path, 'auth.json'),
     ).writeAsString(buildCodexAuth(apiKey));
-    await File(
-      path.join(directory.path, 'config.toml'),
-    ).writeAsString(buildCodexConfigToml(activation.codexModel));
+    final configFile = File(path.join(directory.path, 'config.toml'));
+    final existing = await configFile.exists()
+        ? await configFile.readAsString()
+        : '';
+    await configFile.writeAsString(
+      buildCodexConfigToml(activation.codexModel, existing: existing),
+    );
   }
 }
 
@@ -133,23 +138,28 @@ String buildCodexAuth(String apiKey) {
   return '${encoder.convert({'OPENAI_API_KEY': apiKey})}\n';
 }
 
-/// Builds Codex's complete key-mode config.
+/// Builds Codex's key-mode config, merged over the user's [existing]
 /// `model_provider` must match the `[model_providers.*]` table key.
 @visibleForTesting
-String buildCodexConfigToml(String model) {
+String buildCodexConfigToml(String model, {String existing = ''}) {
   final resolved = model.trim().isEmpty
       ? ApiKeyActivation.defaultCodexModel
       : model.trim();
-  return '''
+  final preserved = stripManagedCodexToml(existing).trim();
+  return [
+    '''
 model_provider = "${AppConfig.codexProviderKey}"
 model = "$resolved"
 model_reasoning_effort = "medium"
 disable_response_storage = true
-
+''',
+    if (preserved.isNotEmpty) '$preserved\n',
+    '''
 [model_providers.${AppConfig.codexProviderKey}]
 name = "custom"
 wire_api = "responses"
 requires_openai_auth = true
 base_url = "${AppConfig.openaiBaseUrl}"
-''';
+''',
+  ].join('\n');
 }

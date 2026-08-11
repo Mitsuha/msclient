@@ -11,13 +11,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// minStep keeps a node on screen long enough to read even when the work behind
-// it finishes instantly (writing a backup takes milliseconds).
-const minStep = 900 * time.Millisecond
-
-// readPause holds the timeline still after a node printed details worth reading.
-const readPause = time.Second
-
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 // Timeline draws a launch sequence as a vertical timeline: one node per step,
@@ -39,14 +32,10 @@ type Timeline struct {
 	key     lipgloss.Style
 
 	// mu guards writes to w: the spinner goroutine and the caller both write.
-	// minStep is a field so tests do not have to wait it out.
-	minStep time.Duration
-
 	mu      sync.Mutex
 	stop    chan struct{}
 	wg      sync.WaitGroup
 	current string
-	started time.Time
 	active  bool
 }
 
@@ -61,7 +50,6 @@ func newTimeline(w io.Writer, tty bool, title string) *Timeline {
 	t := &Timeline{
 		w:       w,
 		tty:     tty,
-		minStep: minStep,
 		title:   r.NewStyle().Bold(true).Foreground(lipgloss.Color("63")),
 		rail:    r.NewStyle().Foreground(colorMuted),
 		pending: r.NewStyle().Foreground(colorAccent),
@@ -79,7 +67,6 @@ func newTimeline(w io.Writer, tty bool, title string) *Timeline {
 func (t *Timeline) Start(label string) {
 	t.mu.Lock()
 	t.current = label
-	t.started = time.Now()
 	t.active = true
 	t.railLine()
 	t.mu.Unlock()
@@ -96,9 +83,6 @@ func (t *Timeline) Start(label string) {
 // one given to Start, so a step can report what it actually did ("使用账号"
 // versus "已申请到账号") only once it knows.
 func (t *Timeline) Done(label ...string) {
-	if wait := t.minStep - time.Since(t.started); wait > 0 {
-		time.Sleep(wait)
-	}
 	t.settle(t.ok, "●", label...)
 }
 
@@ -134,9 +118,6 @@ func (t *Timeline) Details(rows ...[2]string) {
 			t.rail.Render("│"), t.key.Render(row[0]), pad, t.label.Render(row[1]))
 	}
 }
-
-// Pause holds the finished timeline still so the details stay readable.
-func (t *Timeline) Pause() { time.Sleep(readPause) }
 
 // Finish closes the rail with a final line and a trailing blank line.
 func (t *Timeline) Finish(msg string) {

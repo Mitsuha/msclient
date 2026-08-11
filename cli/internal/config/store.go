@@ -1,5 +1,5 @@
-// Package config persists user preferences under ~/.mstages/config.json,
-// currently just the selected proxy node URL.
+// Package config persists user preferences under ~/.mstages/config.json:
+// the selected proxy node URL and the pack tool usage is billed against.
 package config
 
 import (
@@ -9,9 +9,14 @@ import (
 	"github.com/mirrorstages/mstages/internal/app"
 )
 
+// PayAsYouGoPackID is the user_pack_id meaning 按量计费 — the default when the
+// user has never picked a pack.
+const PayAsYouGoPackID = 0
+
 // Config is the on-disk preference file.
 type Config struct {
 	SelectedNodeURL string `json:"selected_node_url,omitempty"`
+	UserPackID      int    `json:"user_pack_id,omitempty"`
 }
 
 // Load reads config.json. A missing file yields a zero-value Config.
@@ -54,5 +59,17 @@ func SelectNode(url string) error {
 		return err
 	}
 	cfg.SelectedNodeURL = url
+	return Save(cfg)
+}
+
+// SelectPack persists the pack to bill against. PayAsYouGoPackID restores
+// 按量计费. The change takes effect the next time a persona requests an
+// account; a tool already configured with another pack is re-issued then.
+func SelectPack(userPackID int) error {
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+	cfg.UserPackID = userPackID
 	return Save(cfg)
 }

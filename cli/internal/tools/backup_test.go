@@ -44,6 +44,38 @@ func TestFileBackupMoveRoundtrip(t *testing.T) {
 	}
 }
 
+// A move-backup still copies the files marked keepInPlace: the CLI edits
+// config.toml in place, so it must survive the backup where the tool expects
+// it — and still be restored verbatim afterwards.
+func TestFileBackupKeepsMarkedFilesInPlace(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "auth.json"), "ORIGINAL_AUTH")
+	writeFile(t, filepath.Join(dir, "config.toml"), "ORIGINAL_TOML")
+
+	b := newFileBackup(dir, []string{"auth.json", "config.toml"}, true).keepInPlace("config.toml")
+	if err := b.Perform(); err != nil {
+		t.Fatalf("Perform: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "auth.json")); !os.IsNotExist(err) {
+		t.Errorf("auth.json should have been moved away")
+	}
+	if got := readFile(t, filepath.Join(dir, "config.toml")); got != "ORIGINAL_TOML" {
+		t.Errorf("live config.toml = %q, want it left in place", got)
+	}
+	if got := readFile(t, filepath.Join(dir, backupDirName, "config.toml")); got != "ORIGINAL_TOML" {
+		t.Errorf("backed up config.toml = %q", got)
+	}
+
+	writeFile(t, filepath.Join(dir, "config.toml"), "PRUNED")
+	if err := b.Restore(); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	if got := readFile(t, filepath.Join(dir, "config.toml")); got != "ORIGINAL_TOML" {
+		t.Errorf("restored config.toml = %q, want ORIGINAL_TOML", got)
+	}
+}
+
 func TestFileBackupCopySemantics(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "settings.json"), "USER")

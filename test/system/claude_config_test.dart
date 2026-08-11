@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:desktop/app/app_config.dart';
 import 'package:desktop/system/claude_config_manager.dart';
 import 'package:desktop/system/home_directory.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -167,6 +168,8 @@ void main() {
       expect(settings['env'], {
         'HTTPS_PROXY': 'http://127.0.0.1:18610',
         'HTTP_PROXY': 'http://127.0.0.1:18610',
+        'NO_PROXY': AppConfig.noProxyHosts,
+        'no_proxy': AppConfig.noProxyHosts,
         'NODE_EXTRA_CA_CERTS': '${home.path}/.mstages/ms.cer',
       });
     });
@@ -212,6 +215,8 @@ void main() {
       expect(settings['env'], {
         'HTTPS_PROXY': 'http://127.0.0.1:18610',
         'HTTP_PROXY': 'http://127.0.0.1:18610',
+        'NO_PROXY': AppConfig.noProxyHosts,
+        'no_proxy': AppConfig.noProxyHosts,
         'NODE_EXTRA_CA_CERTS': '${home.path}/.mstages/ms.cer',
       });
       expect(settings['theme'], 'light');

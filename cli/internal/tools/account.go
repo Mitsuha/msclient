@@ -15,6 +15,9 @@ type accountInfo struct {
 	Email    string
 	Username string
 	Plan     string
+	// UserPackID is the pack this account bills against, 0 for 按量计费. It is
+	// read back out of the credentials, which is where the backend records it.
+	UserPackID int
 }
 
 // pendingAccount is an account granted by the backend but not yet written to
@@ -133,6 +136,18 @@ func codexGrantsMirrorStages(accessToken string) bool {
 		jwt.String(claims, "user_id") != ""
 }
 
+// codexUserPackID reads the user_pack_id claim MirrorStages puts in the Codex
+// access token, mirroring codex_config_manager.dart. A token without the claim
+// is pay-as-you-go, which is also the id 0 means everywhere else.
+func codexUserPackID(accessToken string) int {
+	claims, err := jwt.DecodePayload(accessToken)
+	if err != nil {
+		return 0
+	}
+	id, _ := jwt.Int(claims, "user_pack_id")
+	return id
+}
+
 // codexAccount builds the display info from the id token, falling back to the
 // access token when no id token is present.
 func codexAccount(tokens codexAccessTokens) *accountInfo {
@@ -148,6 +163,9 @@ func codexAccount(tokens codexAccessTokens) *accountInfo {
 		Username: jwt.String(claims, "name"),
 		Plan:     unknownPlan,
 	}
+	// The pack lives on the access token, not the id token: the id token is
+	// OpenAI's, the access token is the one MirrorStages mints.
+	info.UserPackID = codexUserPackID(tokens.Access)
 	if auth := jwt.Object(claims, "https://api.openai.com/auth"); auth != nil {
 		if plan := jwt.String(auth, "chatgpt_plan_type"); plan != "" {
 			info.Plan = capitalize(plan)

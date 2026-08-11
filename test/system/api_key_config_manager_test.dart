@@ -89,6 +89,33 @@ void main() {
     test('falls back to the default model when the field is cleared', () {
       expect(buildCodexConfigToml('  '), contains('model = "gpt-5.6-luna"'));
     });
+
+    test('keeps the user\'s other entries and drops the managed ones', () {
+      final toml = buildCodexConfigToml(
+        'gpt-5.6-luna',
+        existing: '''
+model = "gpt-4"
+model_reasoning_effort = "high"
+approval_policy = "never"
+
+[model_providers.Mirrorstages]
+base_url = "https://stale.example"
+
+[tui]
+theme = "dark"
+''',
+      );
+
+      expect(toml, contains('approval_policy = "never"'));
+      expect(toml, contains('[tui]'));
+      expect(toml, contains('theme = "dark"'));
+      expect(toml, isNot(contains('gpt-4')));
+      expect(toml, isNot(contains('"high"')));
+      expect(toml, isNot(contains('stale.example')));
+      expect('[model_providers.Mirrorstages]'.allMatches(toml).length, 1);
+      // Owned keys lead the file so they stay top-level.
+      expect(toml.indexOf('model_provider'), lessThan(toml.indexOf('[tui]')));
+    });
   });
 
   group('readActive', () {
