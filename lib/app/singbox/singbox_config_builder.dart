@@ -135,6 +135,36 @@ class SingboxConfigBuilder {
           'secret': secret,
         },
       },
+      'dns': {
+        'servers': [
+          {'tag': 'local', 'type': 'udp', 'server': '223.5.5.5'},
+          {
+            'tag': 'remote',
+            'type': 'udp',
+            'server': '8.8.8.8',
+            'detour': 'default-selector',
+          },
+        ],
+        'rules': [
+          {
+            'domain_suffix': ['mirrorstages.com'],
+            'server': 'local',
+          },
+          {
+            'domain_suffix': [
+              'chatgpt.com',
+              'openai.com',
+              'anthropic.com',
+              'claude.com',
+              'claude.ai',
+              'ipinfo.io',
+            ],
+            'server': 'remote',
+          },
+        ],
+        'final': 'local',
+        'strategy': 'ipv4_only',
+      },
       'inbounds': [
         {
           'type': 'http',
